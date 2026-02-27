@@ -201,6 +201,26 @@ func TestQueryNotes(t *testing.T) {
 	})
 }
 
+func TestListTags(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	SaveNote(db, "a note", "#todo #auth")
+	SaveNote(db, "another note", "#auth #bug")
+
+	tags, err := ListTags(db)
+	if err != nil {
+		t.Fatalf("ListTags returned error: %v", err)
+	}
+	if len(tags) != 3 {
+		t.Errorf("expected 3 distinct tags, got %d: %v", len(tags), tags)
+	}
+	// Verify alphabetical order
+	if tags[0] != "#auth" || tags[1] != "#bug" || tags[2] != "#todo" {
+		t.Errorf("expected sorted tags, got %v", tags)
+	}
+}
+
 func TestOpen(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

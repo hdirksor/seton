@@ -255,6 +255,25 @@ func SaveNote(db *sql.DB, text, userTags string) error {
 	return tx.Commit()
 }
 
+// ListTags returns all tag names from the tags table, sorted alphabetically.
+func ListTags(db *sql.DB) ([]string, error) {
+	rows, err := db.Query(`SELECT name FROM tags ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tags []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		tags = append(tags, name)
+	}
+	return tags, rows.Err()
+}
+
 // Note represents a row from the notes table with its associated tags.
 type Note struct {
 	ID        int
