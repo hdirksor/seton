@@ -30,8 +30,8 @@ func TestBuildFilename(t *testing.T) {
 
 func TestWriteNotesFile(t *testing.T) {
 	notes := []store.Note{
-		{ID: 1, Text: "fix the login bug", Tags: "#auth #bug", CreatedAt: "2026-02-27 10:00:00"},
-		{ID: 2, Text: "refactor middleware", Tags: "#auth", CreatedAt: "2026-02-27 11:00:00"},
+		{ID: 1, Text: "fix the login bug", Tags: []string{"#auth", "#bug"}, CreatedAt: "2026-02-27 10:00:00"},
+		{ID: 2, Text: "refactor middleware", Tags: []string{"#auth"}, CreatedAt: "2026-02-27 11:00:00"},
 	}
 
 	dir := t.TempDir()
@@ -69,7 +69,7 @@ func TestWriteNotesFile(t *testing.T) {
 func TestWriteNotesFileCreatesDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "exports")
 	notes := []store.Note{
-		{ID: 1, Text: "a note", Tags: "#todo", CreatedAt: "2026-02-27 10:00:00"},
+		{ID: 1, Text: "a note", Tags: []string{"#todo"}, CreatedAt: "2026-02-27 10:00:00"},
 	}
 	_, err := writeNotesFile(notes, []string{"#todo"}, dir, "2026-02-27T14-30-00")
 	if err != nil {
