@@ -26,6 +26,8 @@ func runJot(_ *cobra.Command, _ []string) error {
 				Title("Note").
 				Placeholder("Write your note here...").
 				Value(&noteText),
+		),
+		huh.NewGroup(
 			huh.NewInput().
 				Title("Tags").
 				Description("Space-separated, e.g. #todo #refactor").

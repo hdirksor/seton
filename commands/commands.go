@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/hdicksonjr/seton/linter"
 	"github.com/hdicksonjr/seton/parser"
 	"github.com/hdicksonjr/seton/writer"
 	"github.com/spf13/cobra"
@@ -42,24 +41,6 @@ func extractCmd(parserImpl parser.Parser) *cobra.Command {
 	}
 }
 
-func lintCmd(linter linter.Linter) *cobra.Command {
-	return &cobra.Command{
-		Use:  "lint [file]",
-		Args: cobra.ExactArgs(1),
-		Run: func(_ *cobra.Command, args []string) {
-			file := args[0]
-			warning, err := linter.Lint(file)
-			if err != nil {
-				fmt.Println("Error:", err)
-			}
-			if warning != nil {
-				fmt.Println("warning")
-			}
-		},
-	}
-
-}
-
 // InitRootCmd Initializes entire CLI interface
 func InitRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -69,7 +50,6 @@ func InitRootCmd() *cobra.Command {
 	}
 
 	rootCmd.AddCommand(extractCmd(parser.NoteParser{}))
-	rootCmd.AddCommand(lintCmd(linter.NoteLinter{FileReader: linter.OSFileReader{}}))
 	rootCmd.AddCommand(jotCmd())
 	rootCmd.AddCommand(queryCmd())
 
