@@ -36,7 +36,7 @@ func runWrite(tags []string, dir string) error {
 	}
 	defer db.Close()
 
-	notes, err := store.QueryNotes(db, tags)
+	notes, err := store.QueryNotes(db, normalizeTags(tags))
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func writeNotesFile(notes []store.Note, tags []string, dir string, timestamp str
 		if i > 0 {
 			fmt.Fprint(f, "\n---\n\n")
 		}
-		fmt.Fprintf(f, "_%s · %s_\n\n%s\n", n.CreatedAt, n.Tags, n.Text)
+		fmt.Fprintf(f, "_%s · %s_\n\n%s\n", n.CreatedAt, strings.Join(n.Tags, " "), n.Text)
 	}
 
 	return path, nil

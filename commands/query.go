@@ -8,6 +8,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// normalizeTags ensures every tag has a leading '#', allowing users to omit it
+// on the command line (which avoids shell comment interpretation of bare '#').
+func normalizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	out := make([]string, len(tags))
+	for i, t := range tags {
+		if !strings.HasPrefix(t, "#") {
+			t = "#" + t
+		}
+		out[i] = t
+	}
+	return out
+}
+
 func queryCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "query [tags...]",
@@ -23,7 +39,7 @@ func runQuery(_ *cobra.Command, args []string) error {
 	}
 	defer db.Close()
 
-	notes, err := store.QueryNotes(db, args)
+	notes, err := store.QueryNotes(db, normalizeTags(args))
 	if err != nil {
 		return err
 	}
@@ -37,7 +53,7 @@ func runQuery(_ *cobra.Command, args []string) error {
 		if i > 0 {
 			fmt.Println(strings.Repeat("-", 40))
 		}
-		fmt.Printf("[%d] %s  tags: %s\n\n%s\n", n.ID, n.CreatedAt, n.Tags, n.Text)
+		fmt.Printf("[%d] %s  tags: %s\n\n%s\n", n.ID, n.CreatedAt, strings.Join(n.Tags, " "), n.Text)
 	}
 	return nil
 }
