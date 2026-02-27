@@ -31,9 +31,27 @@ go build -o seton .
 
 ## Usage
 
+### Jot a note
+
+Open an interactive terminal form to write a note and tag it, saved to a local SQLite database (`~/.seton/notes.db`):
+
+```bash
+seton jot
+```
+
+### Query notes
+
+List notes from the database. With no arguments, returns all notes. With tags, returns only notes that match every tag (AND logic):
+
+```bash
+seton query                        # all notes
+seton query #todo                  # notes tagged #todo
+seton query #auth #bug             # notes tagged both #auth and #bug
+```
+
 ### Extract notes
 
-Walk a directory tree and extract all notes into `.archive/` YAML files:
+Walk a directory tree and extract all embedded notes into `.archive/` YAML files:
 
 ```bash
 seton extract <directory>

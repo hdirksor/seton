@@ -49,6 +49,70 @@ func TestSaveNote(t *testing.T) {
 	}
 }
 
+func TestQueryNotes(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	SaveNote(db, "fix the login bug", "#bug #auth")
+	SaveNote(db, "refactor user service", "#refactor #auth")
+	SaveNote(db, "add dark mode", "#todo")
+
+	t.Run("single tag match", func(t *testing.T) {
+		notes, err := QueryNotes(db, []string{"#auth"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(notes) != 2 {
+			t.Errorf("expected 2 notes, got %d", len(notes))
+		}
+	})
+
+	t.Run("AND match", func(t *testing.T) {
+		notes, err := QueryNotes(db, []string{"#auth", "#bug"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(notes) != 1 {
+			t.Errorf("expected 1 note, got %d", len(notes))
+		}
+		if notes[0].Text != "fix the login bug" {
+			t.Errorf("unexpected note text: %q", notes[0].Text)
+		}
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		notes, err := QueryNotes(db, []string{"#missing"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(notes) != 0 {
+			t.Errorf("expected 0 notes, got %d", len(notes))
+		}
+	})
+
+	t.Run("no tags returns all", func(t *testing.T) {
+		notes, err := QueryNotes(db, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(notes) != 3 {
+			t.Errorf("expected 3 notes, got %d", len(notes))
+		}
+	})
+
+	t.Run("no false prefix match", func(t *testing.T) {
+		// #auth should not match a hypothetical #auth-admin tag
+		SaveNote(db, "edge case note", "#auth-admin")
+		notes, err := QueryNotes(db, []string{"#auth"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(notes) != 2 {
+			t.Errorf("expected 2 notes (not the #auth-admin one), got %d", len(notes))
+		}
+	})
+}
+
 func TestOpen(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
