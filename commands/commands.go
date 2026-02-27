@@ -53,6 +53,7 @@ func InitRootCmd() *cobra.Command {
 	rootCmd.AddCommand(jotCmd())
 	rootCmd.AddCommand(queryCmd())
 	rootCmd.AddCommand(writeCmd())
+	rootCmd.AddCommand(searchCmd())
 
 	return rootCmd
 }
