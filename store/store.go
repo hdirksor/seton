@@ -38,3 +38,47 @@ func SaveNote(db *sql.DB, text, tags string) error {
 	_, err := db.Exec(`INSERT INTO notes (text, tags) VALUES (?, ?)`, text, tags)
 	return err
 }
+
+// Note represents a row from the notes table.
+type Note struct {
+	ID        int
+	Text      string
+	Tags      string
+	CreatedAt string
+}
+
+// QueryNotes returns all notes that contain every tag in the provided list (AND logic).
+// If tags is empty, all notes are returned.
+func QueryNotes(db *sql.DB, tags []string) ([]Note, error) {
+	query := `SELECT id, text, tags, created_at FROM notes`
+	args := make([]any, 0, len(tags))
+
+	if len(tags) > 0 {
+		query += ` WHERE`
+		for i, tag := range tags {
+			if i > 0 {
+				query += ` AND`
+			}
+			query += ` (' ' || tags || ' ') LIKE ?`
+			args = append(args, "% "+tag+" %")
+		}
+	}
+
+	query += ` ORDER BY created_at DESC`
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var notes []Note
+	for rows.Next() {
+		var n Note
+		if err := rows.Scan(&n.ID, &n.Text, &n.Tags, &n.CreatedAt); err != nil {
+			return nil, err
+		}
+		notes = append(notes, n)
+	}
+	return notes, rows.Err()
+}

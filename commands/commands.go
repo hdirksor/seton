@@ -71,6 +71,7 @@ func InitRootCmd() *cobra.Command {
 	rootCmd.AddCommand(extractCmd(parser.NoteParser{}))
 	rootCmd.AddCommand(lintCmd(linter.NoteLinter{FileReader: linter.OSFileReader{}}))
 	rootCmd.AddCommand(jotCmd())
+	rootCmd.AddCommand(queryCmd())
 
 	return rootCmd
 }
