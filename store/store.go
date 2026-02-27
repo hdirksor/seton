@@ -27,19 +27,31 @@ var migrations = []migration{
 		tags       TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	)`},
-	// 2: separate tags table
+	// 2: first-generation tags table (tag strings stored directly in note_tags)
 	{sql: `CREATE TABLE IF NOT EXISTS note_tags (
 		note_id INTEGER NOT NULL REFERENCES notes(id),
 		tag     TEXT NOT NULL,
 		UNIQUE(note_id, tag)
 	)`},
 	// 3: migrate space-separated tags from notes.tags into note_tags
-	{fn: migrateTagsToTable},
-	// 4: drop the now-redundant tags column
+	{fn: migrateTagsToNoteTagsText},
+	// 4: drop the now-redundant tags column from notes
 	{sql: `ALTER TABLE notes DROP COLUMN tags`},
+	// 5: proper tags table — one row per unique tag, with room for metadata
+	{sql: `CREATE TABLE IF NOT EXISTS tags (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		name        TEXT NOT NULL UNIQUE,
+		description TEXT
+	)`},
+	// 6: populate tags from the distinct values already in note_tags
+	{fn: migrateNoteTagsTextToTagsTable},
+	// 7: rebuild note_tags to reference tags.id instead of storing the tag string
+	{fn: rebuildNoteTagsWithIds},
 }
 
-func migrateTagsToTable(tx *sql.Tx) error {
+// migrateTagsToNoteTagsText moves space-separated tag strings from notes.tags
+// into individual rows in note_tags.
+func migrateTagsToNoteTagsText(tx *sql.Tx) error {
 	rows, err := tx.Query(`SELECT id, tags FROM notes WHERE tags IS NOT NULL AND tags != ''`)
 	if err != nil {
 		return err
@@ -68,6 +80,37 @@ func migrateTagsToTable(tx *sql.Tx) error {
 			if _, err := tx.Exec(`INSERT OR IGNORE INTO note_tags (note_id, tag) VALUES (?, ?)`, r.id, tag); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// migrateNoteTagsTextToTagsTable copies every distinct tag string from note_tags
+// into the new tags table.
+func migrateNoteTagsTextToTagsTable(tx *sql.Tx) error {
+	_, err := tx.Exec(`INSERT OR IGNORE INTO tags (name) SELECT DISTINCT tag FROM note_tags WHERE tag IS NOT NULL AND tag != ''`)
+	return err
+}
+
+// rebuildNoteTagsWithIds replaces the note_tags table (which stores tag strings)
+// with one that stores tag_id foreign keys referencing the tags table.
+func rebuildNoteTagsWithIds(tx *sql.Tx) error {
+	steps := []string{
+		`CREATE TABLE note_tags_new (
+			note_id INTEGER NOT NULL REFERENCES notes(id),
+			tag_id  INTEGER NOT NULL REFERENCES tags(id),
+			UNIQUE(note_id, tag_id)
+		)`,
+		`INSERT INTO note_tags_new (note_id, tag_id)
+			SELECT nt.note_id, t.id
+			FROM note_tags nt
+			JOIN tags t ON t.name = nt.tag`,
+		`DROP TABLE note_tags`,
+		`ALTER TABLE note_tags_new RENAME TO note_tags`,
+	}
+	for _, s := range steps {
+		if _, err := tx.Exec(s); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -164,6 +207,19 @@ func mergeTags(bodyTags, userTags []string) []string {
 	return out
 }
 
+// findOrCreateTag ensures a row exists in the tags table for the given name and
+// returns its id.
+func findOrCreateTag(tx *sql.Tx, name string) (int64, error) {
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO tags (name) VALUES (?)`, name); err != nil {
+		return 0, err
+	}
+	var id int64
+	if err := tx.QueryRow(`SELECT id FROM tags WHERE name = ?`, name).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 func SaveNote(db *sql.DB, text, userTags string) error {
 	tags := mergeTags(ExtractTagsFromText(text), strings.Fields(userTags))
 
@@ -185,7 +241,12 @@ func SaveNote(db *sql.DB, text, userTags string) error {
 	}
 
 	for _, tag := range tags {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO note_tags (note_id, tag) VALUES (?, ?)`, noteID, tag); err != nil {
+		tagID, err := findOrCreateTag(tx, tag)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO note_tags (note_id, tag_id) VALUES (?, ?)`, noteID, tagID); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -205,16 +266,17 @@ type Note struct {
 // QueryNotes returns all notes containing every provided tag (AND logic).
 // If tags is empty, all notes are returned.
 func QueryNotes(db *sql.DB, tags []string) ([]Note, error) {
-	query := `SELECT n.id, n.text, n.created_at, GROUP_CONCAT(nt.tag, ' ')
+	query := `SELECT n.id, n.text, n.created_at, GROUP_CONCAT(t.name, ' ')
 	          FROM notes n
-	          LEFT JOIN note_tags nt ON nt.note_id = n.id`
+	          LEFT JOIN note_tags nt ON nt.note_id = n.id
+	          LEFT JOIN tags t ON t.id = nt.tag_id`
 
 	var args []any
 
 	if len(tags) > 0 {
 		subqueries := make([]string, len(tags))
 		for i, tag := range tags {
-			subqueries[i] = `SELECT note_id FROM note_tags WHERE tag = ?`
+			subqueries[i] = `SELECT nt.note_id FROM note_tags nt JOIN tags t ON t.id = nt.tag_id WHERE t.name = ?`
 			args = append(args, tag)
 		}
 		query += ` WHERE n.id IN (` + strings.Join(subqueries, ` INTERSECT `) + `)`

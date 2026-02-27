@@ -19,6 +19,27 @@ func openTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
+// tagNamesForNote fetches tag names for a note by joining through the tags table.
+func tagNamesForNote(t *testing.T, db *sql.DB, noteID int) []string {
+	t.Helper()
+	rows, err := db.Query(`
+		SELECT t.name FROM note_tags nt
+		JOIN tags t ON t.id = nt.tag_id
+		WHERE nt.note_id = ?
+		ORDER BY t.name`, noteID)
+	if err != nil {
+		t.Fatalf("tagNamesForNote query: %v", err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		rows.Scan(&name)
+		names = append(names, name)
+	}
+	return names
+}
+
 func TestExtractTagsFromText(t *testing.T) {
 	cases := []struct {
 		input    string
@@ -44,7 +65,7 @@ func TestExtractTagsFromText(t *testing.T) {
 }
 
 func TestSaveNote(t *testing.T) {
-	t.Run("user tags stored in note_tags", func(t *testing.T) {
+	t.Run("user tags stored via tags table", func(t *testing.T) {
 		db := openTestDB(t)
 		defer db.Close()
 
@@ -52,13 +73,9 @@ func TestSaveNote(t *testing.T) {
 			t.Fatalf("SaveNote returned error: %v", err)
 		}
 
-		var tag string
-		row := db.QueryRow(`SELECT tag FROM note_tags WHERE note_id = 1`)
-		if err := row.Scan(&tag); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		if tag != "#todo" {
-			t.Errorf("expected tag %q, got %q", "#todo", tag)
+		names := tagNamesForNote(t, db, 1)
+		if len(names) != 1 || names[0] != "#todo" {
+			t.Errorf("expected [#todo], got %v", names)
 		}
 	})
 
@@ -70,13 +87,9 @@ func TestSaveNote(t *testing.T) {
 			t.Fatalf("SaveNote returned error: %v", err)
 		}
 
-		var tag string
-		row := db.QueryRow(`SELECT tag FROM note_tags WHERE note_id = 1`)
-		if err := row.Scan(&tag); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		if tag != "#auth" {
-			t.Errorf("expected extracted tag %q, got %q", "#auth", tag)
+		names := tagNamesForNote(t, db, 1)
+		if len(names) != 1 || names[0] != "#auth" {
+			t.Errorf("expected [#auth], got %v", names)
 		}
 	})
 
@@ -84,26 +97,41 @@ func TestSaveNote(t *testing.T) {
 		db := openTestDB(t)
 		defer db.Close()
 
-		// #auth appears in both body and user tags
 		if err := SaveNote(db, "fix the #auth login bug", "#auth #bug"); err != nil {
 			t.Fatalf("SaveNote returned error: %v", err)
 		}
 
-		rows, err := db.Query(`SELECT tag FROM note_tags WHERE note_id = 1 ORDER BY tag`)
-		if err != nil {
-			t.Fatalf("query: %v", err)
+		names := tagNamesForNote(t, db, 1)
+		if len(names) != 2 {
+			t.Errorf("expected 2 distinct tags, got %d: %v", len(names), names)
 		}
-		defer rows.Close()
+	})
 
-		var tags []string
-		for rows.Next() {
-			var tag string
-			rows.Scan(&tag)
-			tags = append(tags, tag)
+	t.Run("tag row created in tags table", func(t *testing.T) {
+		db := openTestDB(t)
+		defer db.Close()
+
+		if err := SaveNote(db, "a note", "#newtag"); err != nil {
+			t.Fatalf("SaveNote returned error: %v", err)
 		}
 
-		if len(tags) != 2 {
-			t.Errorf("expected 2 distinct tags, got %d: %v", len(tags), tags)
+		var name string
+		if err := db.QueryRow(`SELECT name FROM tags WHERE name = '#newtag'`).Scan(&name); err != nil {
+			t.Errorf("expected tag row in tags table: %v", err)
+		}
+	})
+
+	t.Run("same tag shared across notes has one row in tags table", func(t *testing.T) {
+		db := openTestDB(t)
+		defer db.Close()
+
+		SaveNote(db, "first note", "#shared")
+		SaveNote(db, "second note", "#shared")
+
+		var count int
+		db.QueryRow(`SELECT COUNT(*) FROM tags WHERE name = '#shared'`).Scan(&count)
+		if count != 1 {
+			t.Errorf("expected 1 row in tags for #shared, got %d", count)
 		}
 	})
 }
@@ -207,26 +235,31 @@ func TestMigrationFromOldSchema(t *testing.T) {
 	seed.Exec(`INSERT INTO notes (text, tags) VALUES ('old note', '#legacy #test')`)
 	seed.Close()
 
-	// Open through normal path — should run migrations 2, 3, 4.
 	db, err := Open()
 	if err != nil {
 		t.Fatalf("Open after migration: %v", err)
 	}
 	defer db.Close()
 
-	// Legacy tags should have been migrated to note_tags.
-	rows, err := db.Query(`SELECT tag FROM note_tags ORDER BY tag`)
+	// Tags should exist in the tags table.
+	rows, err := db.Query(`SELECT name FROM tags ORDER BY name`)
 	if err != nil {
-		t.Fatalf("query note_tags: %v", err)
+		t.Fatalf("query tags: %v", err)
 	}
 	defer rows.Close()
-	var tags []string
+	var names []string
 	for rows.Next() {
-		var tag string
-		rows.Scan(&tag)
-		tags = append(tags, tag)
+		var name string
+		rows.Scan(&name)
+		names = append(names, name)
 	}
-	if len(tags) != 2 {
-		t.Errorf("expected 2 migrated tags, got %d: %v", len(tags), tags)
+	if len(names) != 2 {
+		t.Errorf("expected 2 tags in tags table, got %d: %v", len(names), names)
+	}
+
+	// note_tags should link the note to both tags via tag_id.
+	noteNames := tagNamesForNote(t, db, 1)
+	if len(noteNames) != 2 {
+		t.Errorf("expected 2 note_tags rows for old note, got %d: %v", len(noteNames), noteNames)
 	}
 }
