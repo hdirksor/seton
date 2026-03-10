@@ -1,0 +1,51 @@
+name: Coverage
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests with coverage
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Generate coverage report
+        id: coverage
+        run: |
+          REPORT=$(go tool cover -func=coverage.out)
+          TOTAL=$(echo "$REPORT" | grep '^total:' | awk '{print $3}')
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          {
+            echo "report<<EOF"
+            echo "$REPORT"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Post coverage comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## Coverage: ${{ steps.coverage.outputs.total }}
+
+            <details>
+            <summary>Per-function breakdown</summary>
+
+            ```
+            ${{ steps.coverage.outputs.report }}
+            ```
+
+            </details>
+          comment-author: github-actions[bot]
+          body-includes: "## Coverage:"

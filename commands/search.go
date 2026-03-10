@@ -3,10 +3,12 @@ package commands
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hdicksonjr/seton/config"
 	"github.com/hdicksonjr/seton/store"
 	"github.com/spf13/cobra"
 )
@@ -18,17 +20,35 @@ const (
 	searchFocusList
 )
 
+type searchPhase int
+
+const (
+	searchPhaseSelect  searchPhase = iota
+	searchPhaseResults
+)
+
 type searchModel struct {
+	// selection phase
 	input    textinput.Model
 	allTags  []string
 	filtered []string
 	selected map[string]bool
 	cursor   int
 	focus    searchFocus
-	done     bool
+
+	// phase
+	phase   searchPhase
+	queryFn func([]string) ([]store.Note, error)
+
+	// results phase
+	notes    []store.Note
+	queryErr error
+
+	// outcome
+	export bool
 }
 
-func initialSearchModel(tags []string) searchModel {
+func initialSearchModel(tags []string, queryFn func([]string) ([]store.Note, error)) searchModel {
 	ti := textinput.New()
 	ti.Placeholder = "type to filter tags..."
 	ti.Focus()
@@ -41,6 +61,7 @@ func initialSearchModel(tags []string) searchModel {
 		allTags:  tags,
 		filtered: filtered,
 		selected: map[string]bool{},
+		queryFn:  queryFn,
 	}
 }
 
@@ -61,6 +82,25 @@ func filterTags(all []string, query string) []string {
 	return out
 }
 
+// executeQuery runs the query for the currently selected tags and transitions
+// to the results phase. Does nothing if no tags are selected.
+func (m searchModel) executeQuery() (tea.Model, tea.Cmd) {
+	var selected []string
+	for tag, ok := range m.selected {
+		if ok {
+			selected = append(selected, tag)
+		}
+	}
+	if len(selected) == 0 {
+		return m, nil
+	}
+	notes, err := m.queryFn(selected)
+	m.notes = notes
+	m.queryErr = err
+	m.phase = searchPhaseResults
+	return m, nil
+}
+
 func (m searchModel) Init() tea.Cmd {
 	return textinput.Blink
 }
@@ -73,13 +113,28 @@ func (m searchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+		if m.phase == searchPhaseResults {
+			switch msg.Type {
+			case tea.KeyCtrlE:
+				m.export = true
+				return m, tea.Quit
+			case tea.KeyEsc, tea.KeyEnter:
+				return m, tea.Quit
+			case tea.KeyRunes:
+				if msg.String() == "q" {
+					return m, tea.Quit
+				}
+			}
+			return m, nil
+		}
+
+		// searchPhaseSelect
 		if m.focus == searchFocusInput {
 			switch msg.Type {
 			case tea.KeyEsc:
 				return m, tea.Quit
 			case tea.KeyEnter:
-				m.done = true
-				return m, tea.Quit
+				return m.executeQuery()
 			case tea.KeyDown:
 				if len(m.filtered) > 0 {
 					m.focus = searchFocusList
@@ -103,8 +158,7 @@ func (m searchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				return m, tea.Quit
 			case tea.KeyEnter:
-				m.done = true
-				return m, tea.Quit
+				return m.executeQuery()
 			case tea.KeyUp:
 				if m.cursor == 0 {
 					m.focus = searchFocusInput
@@ -141,6 +195,13 @@ var (
 )
 
 func (m searchModel) View() string {
+	if m.phase == searchPhaseResults {
+		return m.resultsView()
+	}
+	return m.selectView()
+}
+
+func (m searchModel) selectView() string {
 	var b strings.Builder
 
 	b.WriteString(headerTagStyle.Render("Search tags") + "\n\n")
@@ -170,10 +231,31 @@ func (m searchModel) View() string {
 			selectedCount++
 		}
 	}
-	hint := fmt.Sprintf("\n%d selected · ↑/↓ navigate · space toggle · enter confirm · q quit",
+	hint := fmt.Sprintf("\n%d selected · ↑/↓ navigate · space toggle · enter search · q quit",
 		selectedCount)
 	b.WriteString(dimTagStyle.Render(hint))
 
+	return b.String()
+}
+
+func (m searchModel) resultsView() string {
+	var b strings.Builder
+
+	if m.queryErr != nil {
+		b.WriteString(fmt.Sprintf("Error: %v\n", m.queryErr))
+	} else if len(m.notes) == 0 {
+		b.WriteString("No notes found.\n")
+	} else {
+		for i, n := range m.notes {
+			if i > 0 {
+				b.WriteString(strings.Repeat("-", 40) + "\n")
+			}
+			b.WriteString(fmt.Sprintf("[%d] %s  tags: %s\n\n%s\n",
+				n.ID, n.CreatedAt, strings.Join(n.Tags, " "), n.Text))
+		}
+	}
+
+	b.WriteString(dimTagStyle.Render("\nctrl+e export · q quit"))
 	return b.String()
 }
 
@@ -203,14 +285,18 @@ func runSearch(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	p := tea.NewProgram(initialSearchModel(allTags))
+	m := initialSearchModel(allTags, func(tags []string) ([]store.Note, error) {
+		return store.QueryNotes(db, tags)
+	})
+
+	p := tea.NewProgram(m)
 	result, err := p.Run()
 	if err != nil {
 		return err
 	}
 
 	final := result.(searchModel)
-	if !final.done {
+	if final.phase != searchPhaseResults || !final.export || len(final.notes) == 0 {
 		return nil
 	}
 
@@ -221,27 +307,15 @@ func runSearch(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	if len(selected) == 0 {
-		return nil
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
 	}
-
-	notes, err := store.QueryNotes(db, selected)
+	timestamp := time.Now().Format("2006-01-02T15-04-05")
+	path, err := exportNotesFile(final.notes, selected, cfg.Paths.Exports(), timestamp)
 	if err != nil {
 		return err
 	}
-
-	fmt.Println()
-	if len(notes) == 0 {
-		fmt.Println("No notes found.")
-		return nil
-	}
-
-	for i, n := range notes {
-		if i > 0 {
-			fmt.Println(strings.Repeat("-", 40))
-		}
-		fmt.Printf("[%d] %s  tags: %s\n\n%s\n", n.ID, n.CreatedAt, strings.Join(n.Tags, " "), n.Text)
-	}
-
+	fmt.Printf("Written to %s\n", path)
 	return nil
 }

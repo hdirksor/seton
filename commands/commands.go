@@ -52,8 +52,9 @@ func InitRootCmd() *cobra.Command {
 	rootCmd.AddCommand(extractCmd(parser.NoteParser{}))
 	rootCmd.AddCommand(jotCmd())
 	rootCmd.AddCommand(queryCmd())
-	rootCmd.AddCommand(writeCmd())
+	rootCmd.AddCommand(exportCmd())
 	rootCmd.AddCommand(searchCmd())
+	rootCmd.AddCommand(importCmd())
 
 	return rootCmd
 }
