@@ -264,11 +264,15 @@ func searchCmd() *cobra.Command {
 		Use:   "search",
 		Short: "Interactively search tags and query matching notes",
 		Args:  cobra.NoArgs,
-		RunE:  runSearch,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runSearch(func(m tea.Model) (tea.Model, error) {
+				return tea.NewProgram(m).Run()
+			})
+		},
 	}
 }
 
-func runSearch(_ *cobra.Command, _ []string) error {
+func runSearch(runProg func(tea.Model) (tea.Model, error)) error {
 	db, err := store.Open()
 	if err != nil {
 		return err
@@ -289,8 +293,7 @@ func runSearch(_ *cobra.Command, _ []string) error {
 		return store.QueryNotes(db, tags)
 	})
 
-	p := tea.NewProgram(m)
-	result, err := p.Run()
+	result, err := runProg(m)
 	if err != nil {
 		return err
 	}

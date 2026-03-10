@@ -245,6 +245,101 @@ func TestImportModelSaveError(t *testing.T) {
 	}
 }
 
+func TestArchiveFileMkdirError(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "notes.md")
+	os.WriteFile(src, []byte("content"), 0644)
+	// Place a regular file where the archive dir would need to be created.
+	blocker := filepath.Join(t.TempDir(), "notadir")
+	os.WriteFile(blocker, []byte("x"), 0644)
+	err := archiveFile(src, filepath.Join(blocker, "subdir"), "2026-01-02")
+	if err == nil {
+		t.Error("expected error when archive dir cannot be created")
+	}
+}
+
+func TestArchiveFileRenameError(t *testing.T) {
+	archiveDir := t.TempDir()
+	err := archiveFile("/nonexistent/path/file.md", archiveDir, "2026-01-02")
+	if err == nil {
+		t.Error("expected error when source file does not exist")
+	}
+}
+
+func TestImportModelInit(t *testing.T) {
+	m := newImportModel([]string{"block"}, func(_, _ string) error { return nil })
+	cmd := m.Init()
+	if cmd == nil {
+		t.Error("expected Init to return a non-nil cmd")
+	}
+}
+
+func TestImportModelNonKeyMessage(t *testing.T) {
+	blocks := []string{"first #todo"}
+	m := newImportModel(blocks, func(_, _ string) error { return nil })
+	// Sending a non-key message should be forwarded to tagInput, not crash
+	result, cmd := m.Update("not a key message")
+	updated := result.(importModel)
+	if updated.current != 0 {
+		t.Errorf("expected current unchanged, got %d", updated.current)
+	}
+	_ = cmd // cmd comes from tagInput.Update, just verify no panic
+}
+
+func TestImportModelView(t *testing.T) {
+	t.Run("quitting shows abort message", func(t *testing.T) {
+		m := newImportModel([]string{"block"}, func(_, _ string) error { return nil })
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		updated := result.(importModel)
+		view := updated.View()
+		if !strings.Contains(view, "Aborted") {
+			t.Errorf("expected 'Aborted' in view, got: %s", view)
+		}
+	})
+
+	t.Run("completed shows done message", func(t *testing.T) {
+		m := newImportModel([]string{"block"}, func(_, _ string) error { return nil })
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+		updated := result.(importModel)
+		view := updated.View()
+		if !strings.Contains(view, "Done") {
+			t.Errorf("expected 'Done' in view, got: %s", view)
+		}
+	})
+
+	t.Run("mid-session shows block and hints", func(t *testing.T) {
+		m := newImportModel([]string{"first block", "second block"}, func(_, _ string) error { return nil })
+		view := m.View()
+		if !strings.Contains(view, "Block 1 / 2") {
+			t.Errorf("expected block counter in view, got: %s", view)
+		}
+		if !strings.Contains(view, "first block") {
+			t.Errorf("expected block text in view, got: %s", view)
+		}
+		if !strings.Contains(view, "ctrl+s save") {
+			t.Errorf("expected hints in view, got: %s", view)
+		}
+	})
+
+	t.Run("mid-session with save error shows error", func(t *testing.T) {
+		m := newImportModel([]string{"block"}, func(_, _ string) error { return errors.New("db error") })
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+		updated := result.(importModel)
+		view := updated.View()
+		if !strings.Contains(view, "Error:") {
+			t.Errorf("expected error in view, got: %s", view)
+		}
+	})
+
+	t.Run("past end of blocks returns empty", func(t *testing.T) {
+		m := newImportModel([]string{"block"}, func(_, _ string) error { return nil })
+		m.current = 99 // manually push past end without completing
+		view := m.View()
+		if view != "" {
+			t.Errorf("expected empty view when past end, got: %s", view)
+		}
+	})
+}
+
 func TestImportModelTagInputUpdatesOnAdvance(t *testing.T) {
 	blocks := []string{"first #todo", "second #auth"}
 	m := newImportModel(blocks, func(_, _ string) error { return nil })
@@ -255,4 +350,87 @@ func TestImportModelTagInputUpdatesOnAdvance(t *testing.T) {
 	if !strings.Contains(updated.tagInput.Value(), "#auth") {
 		t.Errorf("expected tag input to contain #auth after advancing, got %q", updated.tagInput.Value())
 	}
+}
+
+func fixedProg(m importModel) func(tea.Model) (tea.Model, error) {
+	return func(_ tea.Model) (tea.Model, error) { return m, nil }
+}
+
+func TestRunImport(t *testing.T) {
+	t.Run("file not found returns error", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		err := runImport(nil, []string{"/nonexistent/file.md"})
+		if err == nil {
+			t.Error("expected error for missing file")
+		}
+	})
+
+	t.Run("no blocks returns error", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		f := filepath.Join(t.TempDir(), "notes.md")
+		os.WriteFile(f, []byte("no delimiters here"), 0644)
+		err := runImport(nil, []string{f})
+		if err == nil {
+			t.Error("expected error when no blocks found")
+		}
+	})
+
+	t.Run("runProg error is returned", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		f := filepath.Join(t.TempDir(), "notes.md")
+		os.WriteFile(f, []byte("~! a note !~"), 0644)
+		stub := func(_ tea.Model) (tea.Model, error) { return nil, errors.New("terminal error") }
+		if err := runImport(stub, []string{f}); err == nil {
+			t.Error("expected error from runProg")
+		}
+	})
+
+	t.Run("completed archives the file", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		f := filepath.Join(t.TempDir(), "notes.md")
+		os.WriteFile(f, []byte("~! a note !~"), 0644)
+		if err := runImport(fixedProg(importModel{completed: true, saved: 1}), []string{f}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, err := os.Stat(f); !os.IsNotExist(err) {
+			t.Error("expected original file to be gone after archive")
+		}
+	})
+
+	t.Run("quitting does not archive the file", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		f := filepath.Join(t.TempDir(), "notes.md")
+		os.WriteFile(f, []byte("~! a note !~"), 0644)
+		if err := runImport(fixedProg(importModel{quitting: true}), []string{f}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("expected original file to still exist: %v", err)
+		}
+	})
+
+	t.Run("store open error is returned", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		// Place a regular file at ~/.seton so MkdirAll inside store.Open fails.
+		os.WriteFile(filepath.Join(home, ".seton"), []byte("x"), 0644)
+		f := filepath.Join(t.TempDir(), "notes.md")
+		os.WriteFile(f, []byte("~! a note !~"), 0644)
+		if err := runImport(nil, []string{f}); err == nil {
+			t.Error("expected error from store.Open")
+		}
+	})
+
+	t.Run("archiveFile error is returned", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		// Place a regular file at the archive path so MkdirAll inside archiveFile fails.
+		os.MkdirAll(filepath.Join(home, "seton", "notes"), 0755)
+		os.WriteFile(filepath.Join(home, "seton", "notes", ".archived"), []byte("x"), 0644)
+		f := filepath.Join(t.TempDir(), "notes.md")
+		os.WriteFile(f, []byte("~! a note !~"), 0644)
+		if err := runImport(fixedProg(importModel{completed: true}), []string{f}); err == nil {
+			t.Error("expected error from archiveFile")
+		}
+	})
 }
