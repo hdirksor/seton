@@ -39,14 +39,32 @@ Open an interactive terminal form to write a note and tag it, saved to a local S
 seton jot
 ```
 
+### Search tags interactively
+
+Open an interactive tag browser to select tags, then display matching notes:
+
+```bash
+seton search
+```
+
 ### Query notes
 
 List notes from the database. With no arguments, returns all notes. With tags, returns only notes that match every tag (AND logic):
 
 ```bash
 seton query                        # all notes
-seton query #todo                  # notes tagged #todo
-seton query #auth #bug             # notes tagged both #auth and #bug
+seton query todo                   # notes tagged #todo
+seton query auth bug               # notes tagged both #auth and #bug
+```
+
+### Export notes
+
+Query notes by tags and write the results to a markdown file in `~/.seton/exports/`:
+
+```bash
+seton export todo
+seton export auth bug
+seton export auth --dir ./notes    # write to a custom directory
 ```
 
 ### Extract notes
@@ -58,14 +76,6 @@ seton extract <directory>
 ```
 
 For each source file containing notes, a corresponding `<filename>.yaml` is created in a `.archive/` directory alongside it.
-
-### Lint a file
-
-Check a file for malformed note syntax:
-
-```bash
-seton lint <file>
-```
 
 ## Output Format
 
