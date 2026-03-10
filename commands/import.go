@@ -174,11 +174,15 @@ func importCmd() *cobra.Command {
 		Use:   "import <file>",
 		Short: "Review and save notes from a file containing ~! !~ blocks",
 		Args:  cobra.ExactArgs(1),
-		RunE:  runImport,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runImport(func(m tea.Model) (tea.Model, error) {
+				return tea.NewProgram(m).Run()
+			}, args)
+		},
 	}
 }
 
-func runImport(_ *cobra.Command, args []string) error {
+func runImport(runProg func(tea.Model) (tea.Model, error), args []string) error {
 	path := args[0]
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -205,8 +209,7 @@ func runImport(_ *cobra.Command, args []string) error {
 		return store.SaveNote(db, text, tags)
 	})
 
-	p := tea.NewProgram(m)
-	result, err := p.Run()
+	result, err := runProg(m)
 	if err != nil {
 		return err
 	}

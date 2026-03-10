@@ -1,7 +1,10 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +13,22 @@ import (
 )
 
 var noopQuery = func(_ []string) ([]store.Note, error) { return nil, nil }
+
+func fixedSearchProg(m searchModel) func(tea.Model) (tea.Model, error) {
+	return func(_ tea.Model) (tea.Model, error) { return m, nil }
+}
+
+func seedNote(t *testing.T) {
+	t.Helper()
+	db, err := store.Open()
+	if err != nil {
+		t.Fatalf("opening db: %v", err)
+	}
+	defer db.Close()
+	if err := store.SaveNote(db, "a note #todo", ""); err != nil {
+		t.Fatalf("saving note: %v", err)
+	}
+}
 
 func TestFilterTags(t *testing.T) {
 	all := []string{"#auth", "#authentication", "#bug", "#todo"}
@@ -484,6 +503,103 @@ func TestSearchModelView(t *testing.T) {
 		view := m4.View()
 		if !strings.Contains(view, "Error:") {
 			t.Errorf("expected 'Error:' in view, got: %s", view)
+		}
+	})
+}
+
+func TestRunSearch(t *testing.T) {
+	t.Run("no tags in db prints message and returns nil", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		if err := runSearch(nil); err != nil {
+			t.Errorf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("runProg error is returned", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		seedNote(t)
+		stub := func(_ tea.Model) (tea.Model, error) { return nil, errors.New("terminal error") }
+		if err := runSearch(stub); err == nil {
+			t.Error("expected error from runProg")
+		}
+	})
+
+	t.Run("tui exits without results returns nil", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		seedNote(t)
+		stub := fixedSearchProg(searchModel{phase: searchPhaseSelect})
+		if err := runSearch(stub); err != nil {
+			t.Errorf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("results with export=false returns nil", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		seedNote(t)
+		result := searchModel{
+			phase:  searchPhaseResults,
+			export: false,
+			notes:  []store.Note{{ID: 1, Text: "a note", Tags: []string{"#todo"}}},
+		}
+		if err := runSearch(fixedSearchProg(result)); err != nil {
+			t.Errorf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("results with no notes and export=true returns nil", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		seedNote(t)
+		result := searchModel{phase: searchPhaseResults, export: true, notes: nil}
+		if err := runSearch(fixedSearchProg(result)); err != nil {
+			t.Errorf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("results with export=true writes export file", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		seedNote(t)
+		result := searchModel{
+			phase:    searchPhaseResults,
+			export:   true,
+			notes:    []store.Note{{ID: 1, Text: "a note", Tags: []string{"#todo"}}},
+			selected: map[string]bool{"#todo": true},
+		}
+		if err := runSearch(fixedSearchProg(result)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		entries, err := os.ReadDir(filepath.Join(home, "seton", "exports"))
+		if err != nil || len(entries) == 0 {
+			t.Errorf("expected export file to be created")
+		}
+	})
+}
+
+func TestRunSearchErrorPaths(t *testing.T) {
+	t.Run("store open error is returned", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		os.WriteFile(filepath.Join(home, ".seton"), []byte("x"), 0644)
+		if err := runSearch(nil); err == nil {
+			t.Error("expected error from store.Open")
+		}
+	})
+
+	t.Run("exportNotesFile error is returned", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		seedNote(t)
+		// Place a regular file at the exports path so os.MkdirAll inside exportNotesFile fails.
+		os.MkdirAll(filepath.Join(home, "seton"), 0755)
+		os.WriteFile(filepath.Join(home, "seton", "exports"), []byte("x"), 0644)
+		result := searchModel{
+			phase:    searchPhaseResults,
+			export:   true,
+			notes:    []store.Note{{ID: 1, Text: "a note", Tags: []string{"#todo"}}},
+			selected: map[string]bool{"#todo": true},
+		}
+		if err := runSearch(fixedSearchProg(result)); err == nil {
+			t.Error("expected error from exportNotesFile")
 		}
 	})
 }
