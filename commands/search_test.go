@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -205,6 +207,79 @@ func TestSearchModelKeyHandling(t *testing.T) {
 	})
 }
 
+func TestSearchModelInit(t *testing.T) {
+	m := initialSearchModel([]string{"#auth"}, noopQuery)
+	cmd := m.Init()
+	if cmd == nil {
+		t.Error("expected Init to return a non-nil cmd")
+	}
+}
+
+func TestSearchModelUpdateMissingBranches(t *testing.T) {
+	tags := []string{"#auth", "#bug", "#todo"}
+
+	t.Run("ctrl+c in select phase quits", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		if cmd == nil {
+			t.Error("expected quit cmd from ctrl+c")
+		}
+	})
+
+	t.Run("esc in input focus quits", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		if cmd == nil {
+			t.Error("expected quit cmd from esc in input focus")
+		}
+	})
+
+	t.Run("esc in list focus quits", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m2 := result.(searchModel)
+		_, cmd := m2.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		if cmd == nil {
+			t.Error("expected quit cmd from esc in list focus")
+		}
+	})
+
+	t.Run("q rune in list focus quits", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m2 := result.(searchModel)
+		_, cmd := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+		if cmd == nil {
+			t.Error("expected quit cmd from q in list focus")
+		}
+	})
+
+	t.Run("down with empty filtered list stays in input focus", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		// type something that matches nothing to empty the filtered list
+		for _, ch := range "zzz" {
+			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+			m = result.(searchModel)
+		}
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		updated := result.(searchModel)
+		if updated.focus != searchFocusInput {
+			t.Errorf("expected focus to remain on input when filtered list is empty")
+		}
+	})
+
+	t.Run("non-key message is ignored", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		result, cmd := m.Update("not a key message")
+		if result.(searchModel).phase != searchPhaseSelect {
+			t.Error("expected phase unchanged after non-key message")
+		}
+		if cmd != nil {
+			t.Error("expected nil cmd from non-key message")
+		}
+	})
+}
+
 func TestSearchModelResultsPhase(t *testing.T) {
 	notes := []store.Note{{ID: 1, Text: "a note", Tags: []string{"#auth"}}}
 	queryFn := func(_ []string) ([]store.Note, error) { return notes, nil }
@@ -245,6 +320,170 @@ func TestSearchModelResultsPhase(t *testing.T) {
 		updated := result.(searchModel)
 		if updated.export {
 			t.Errorf("expected export=false after enter in results phase")
+		}
+	})
+
+	t.Run("esc quits without export", func(t *testing.T) {
+		m := inResults()
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		if cmd == nil {
+			t.Error("expected quit cmd from esc in results phase")
+		}
+	})
+
+	t.Run("ctrl+c quits without export", func(t *testing.T) {
+		m := inResults()
+		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		if cmd == nil {
+			t.Error("expected quit cmd from ctrl+c in results phase")
+		}
+		if result.(searchModel).export {
+			t.Error("expected export=false after ctrl+c")
+		}
+	})
+
+	t.Run("non-q rune in results phase is ignored", func(t *testing.T) {
+		m := inResults()
+		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+		if result.(searchModel).export {
+			t.Error("expected export=false after non-q rune")
+		}
+		if cmd != nil {
+			t.Error("expected nil cmd from non-q rune in results phase")
+		}
+	})
+}
+
+func TestSearchModelView(t *testing.T) {
+	tags := []string{"#auth", "#bug"}
+
+	t.Run("select phase view contains header and input", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		view := m.View()
+		if !strings.Contains(view, "Search tags") {
+			t.Errorf("expected view to contain 'Search tags', got: %s", view)
+		}
+		if !strings.Contains(view, "enter search") {
+			t.Errorf("expected view to contain hint, got: %s", view)
+		}
+	})
+
+	t.Run("select phase view lists tags", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		view := m.View()
+		if !strings.Contains(view, "#auth") || !strings.Contains(view, "#bug") {
+			t.Errorf("expected view to contain tags, got: %s", view)
+		}
+	})
+
+	t.Run("select phase view with no matching tags", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		for _, ch := range "zzz" {
+			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+			m = result.(searchModel)
+		}
+		view := m.View()
+		if !strings.Contains(view, "no matching tags") {
+			t.Errorf("expected 'no matching tags' in view, got: %s", view)
+		}
+	})
+
+	t.Run("results phase view contains notes", func(t *testing.T) {
+		notes := []store.Note{{ID: 1, Text: "my note", Tags: []string{"#auth"}}}
+		queryFn := func(_ []string) ([]store.Note, error) { return notes, nil }
+		m := initialSearchModel([]string{"#auth"}, queryFn)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m2 := result.(searchModel)
+		result2, _ := m2.Update(tea.KeyMsg{Type: tea.KeySpace})
+		m3 := result2.(searchModel)
+		result3, _ := m3.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m4 := result3.(searchModel)
+
+		view := m4.View()
+		if !strings.Contains(view, "my note") {
+			t.Errorf("expected view to contain note text, got: %s", view)
+		}
+		if !strings.Contains(view, "ctrl+e export") {
+			t.Errorf("expected view to contain export hint, got: %s", view)
+		}
+	})
+
+	t.Run("results phase view with no notes", func(t *testing.T) {
+		m := initialSearchModel([]string{"#auth"}, noopQuery)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m2 := result.(searchModel)
+		result2, _ := m2.Update(tea.KeyMsg{Type: tea.KeySpace})
+		m3 := result2.(searchModel)
+		result3, _ := m3.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m4 := result3.(searchModel)
+
+		view := m4.View()
+		if !strings.Contains(view, "No notes found") {
+			t.Errorf("expected 'No notes found' in view, got: %s", view)
+		}
+	})
+
+	t.Run("select phase view shows selected checkbox", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		// select #auth
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m2 := result.(searchModel)
+		result2, _ := m2.Update(tea.KeyMsg{Type: tea.KeySpace})
+		m3 := result2.(searchModel)
+		view := m3.View()
+		if !strings.Contains(view, "[x]") {
+			t.Errorf("expected selected checkbox [x] in view, got: %s", view)
+		}
+	})
+
+	t.Run("select phase view shows cursor in list focus", func(t *testing.T) {
+		m := initialSearchModel(tags, noopQuery)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m2 := result.(searchModel)
+		view := m2.View()
+		if !strings.Contains(view, ">") {
+			t.Errorf("expected cursor > in list focus view, got: %s", view)
+		}
+	})
+
+	t.Run("results phase view with multiple notes shows separator", func(t *testing.T) {
+		notes := []store.Note{
+			{ID: 1, Text: "first note", Tags: []string{"#auth"}},
+			{ID: 2, Text: "second note", Tags: []string{"#auth"}},
+		}
+		queryFn := func(_ []string) ([]store.Note, error) { return notes, nil }
+		m := initialSearchModel([]string{"#auth"}, queryFn)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m2 := result.(searchModel)
+		result2, _ := m2.Update(tea.KeyMsg{Type: tea.KeySpace})
+		m3 := result2.(searchModel)
+		result3, _ := m3.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m4 := result3.(searchModel)
+
+		view := m4.View()
+		if !strings.Contains(view, "first note") || !strings.Contains(view, "second note") {
+			t.Errorf("expected both notes in view, got: %s", view)
+		}
+		if !strings.Contains(view, strings.Repeat("-", 40)) {
+			t.Errorf("expected separator between notes, got: %s", view)
+		}
+	})
+
+	t.Run("results phase view with query error", func(t *testing.T) {
+		errQuery := func(_ []string) ([]store.Note, error) {
+			return nil, fmt.Errorf("db failed")
+		}
+		m := initialSearchModel([]string{"#auth"}, errQuery)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m2 := result.(searchModel)
+		result2, _ := m2.Update(tea.KeyMsg{Type: tea.KeySpace})
+		m3 := result2.(searchModel)
+		result3, _ := m3.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m4 := result3.(searchModel)
+
+		view := m4.View()
+		if !strings.Contains(view, "Error:") {
+			t.Errorf("expected 'Error:' in view, got: %s", view)
 		}
 	})
 }
