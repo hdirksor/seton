@@ -32,7 +32,13 @@ func newJotModel() jotModel {
 			huh.NewText().
 				Title("Note").
 				Placeholder("Write your note here...").
-				Value(&noteText),
+				Value(&noteText).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return fmt.Errorf("note cannot be empty")
+					}
+					return nil
+				}),
 		),
 		huh.NewGroup(
 			huh.NewInput().
