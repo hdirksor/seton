@@ -32,7 +32,7 @@ func queryCmd() *cobra.Command {
 	}
 }
 
-func runQuery(_ *cobra.Command, args []string) error {
+func runQuery(cmd *cobra.Command, args []string) error {
 	db, err := store.Open()
 	if err != nil {
 		return err
@@ -44,16 +44,17 @@ func runQuery(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	out := cmd.OutOrStdout()
 	if len(notes) == 0 {
-		fmt.Println("No notes found.")
+		fmt.Fprintln(out, "No notes found.")
 		return nil
 	}
 
 	for i, n := range notes {
 		if i > 0 {
-			fmt.Println(strings.Repeat("-", 40))
+			fmt.Fprintln(out, strings.Repeat("-", 40))
 		}
-		fmt.Printf("[%d] %s  tags: %s\n\n%s\n", n.ID, n.CreatedAt, strings.Join(n.Tags, " "), n.Text)
+		fmt.Fprintf(out, "[%d] %s  tags: %s\n\n%s\n", n.ID, n.CreatedAt, strings.Join(n.Tags, " "), n.Text)
 	}
 	return nil
 }
