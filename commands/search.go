@@ -188,17 +188,17 @@ func (m searchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 var (
-	selectedTagStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	cursorTagStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
-	dimTagStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	selectedTagStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#6BCB77", Light: "#2E7D32"})
+	cursorTagStyle   = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#64B5F6", Light: "#1565C0"}).Bold(true)
+	dimTagStyle      = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#9E9E9E", Light: "#616161"})
 	headerTagStyle   = lipgloss.NewStyle().Bold(true)
 )
 
 func (m searchModel) View() string {
 	if m.phase == searchPhaseResults {
-		return m.resultsView()
+		return banner + m.resultsView()
 	}
-	return m.selectView()
+	return banner + m.selectView()
 }
 
 func (m searchModel) selectView() string {

@@ -8,6 +8,18 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// ResolveEditor returns the editor to use when opening files. It checks the
+// config value first, then $EDITOR, then falls back to "vi".
+func (c Config) ResolveEditor() string {
+	if c.Editor != "" {
+		return c.Editor
+	}
+	if e := os.Getenv("EDITOR"); e != "" {
+		return e
+	}
+	return "vi"
+}
+
 // Delimiters holds the open/close markers used to identify notes in a file.
 type Delimiters struct {
 	Open  string `toml:"open"`
@@ -51,6 +63,7 @@ func (p Paths) Archive() string {
 type Config struct {
 	Delimiters Delimiters `toml:"delimiters"`
 	Paths      Paths      `toml:"paths"`
+	Editor     string     `toml:"editor"`
 }
 
 func defaults() Config {

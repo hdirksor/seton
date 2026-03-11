@@ -141,9 +141,9 @@ var (
 	importBlockStyle  = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				Padding(0, 1).
-				Foreground(lipgloss.Color("7"))
-	importHintStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	importErrStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
+				Foreground(lipgloss.AdaptiveColor{Dark: "#CED4DA", Light: "#343A40"})
+	importHintStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#9E9E9E", Light: "#616161"})
+	importErrStyle  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#EF5350", Light: "#B71C1C"}).Bold(true)
 )
 
 func (m importModel) View() string {
@@ -158,6 +158,7 @@ func (m importModel) View() string {
 	}
 
 	var b strings.Builder
+	b.WriteString(banner)
 	b.WriteString(importHeaderStyle.Render(
 		fmt.Sprintf("Block %d / %d", m.current+1, len(m.blocks))) + "\n\n")
 	b.WriteString(importBlockStyle.Render(m.blocks[m.current]) + "\n\n")

@@ -99,6 +99,56 @@ root = "/tmp/my-notes"
 	}
 }
 
+func TestResolveEditor(t *testing.T) {
+	t.Run("uses config editor when set", func(t *testing.T) {
+		cfg := Config{Editor: "nano"}
+		if got := cfg.ResolveEditor(); got != "nano" {
+			t.Errorf("expected nano, got %s", got)
+		}
+	})
+
+	t.Run("falls back to EDITOR env var", func(t *testing.T) {
+		t.Setenv("EDITOR", "emacs")
+		cfg := Config{}
+		if got := cfg.ResolveEditor(); got != "emacs" {
+			t.Errorf("expected emacs, got %s", got)
+		}
+	})
+
+	t.Run("falls back to vi when neither set", func(t *testing.T) {
+		t.Setenv("EDITOR", "")
+		cfg := Config{}
+		if got := cfg.ResolveEditor(); got != "vi" {
+			t.Errorf("expected vi, got %s", got)
+		}
+	})
+
+	t.Run("config editor takes precedence over EDITOR env var", func(t *testing.T) {
+		t.Setenv("EDITOR", "emacs")
+		cfg := Config{Editor: "nano"}
+		if got := cfg.ResolveEditor(); got != "nano" {
+			t.Errorf("expected nano, got %s", got)
+		}
+	})
+}
+
+func TestEditorConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	os.MkdirAll(filepath.Join(dir, ".seton"), 0755)
+	os.WriteFile(filepath.Join(dir, ".seton", "config.toml"), []byte(`
+editor = "code --wait"
+`), 0644)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Editor != "code --wait" {
+		t.Errorf("expected editor %q, got %q", "code --wait", cfg.Editor)
+	}
+}
+
 func TestTildeExpansion(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

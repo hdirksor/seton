@@ -9,6 +9,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const banner = `░█▀█░█▀█░▀█▀░█▀▀░█▀▀
+░█░█░█░█░░█░░█▀▀░▀▀█
+░▀░▀░▀▀▀░░▀░░▀▀▀░▀▀▀
+
+`
+
 func extractCmd(parserImpl parser.Parser) *cobra.Command {
 	return &cobra.Command{
 		Use:   "extract [directory] [tag]",
