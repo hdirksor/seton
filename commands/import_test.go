@@ -296,13 +296,13 @@ func TestImportModelView(t *testing.T) {
 		}
 	})
 
-	t.Run("completed shows done message", func(t *testing.T) {
+	t.Run("completed shows saved count", func(t *testing.T) {
 		m := newImportModel([]string{"block"}, func(_, _ string) error { return nil })
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 		updated := result.(importModel)
 		view := updated.View()
-		if !strings.Contains(view, "Done") {
-			t.Errorf("expected 'Done' in view, got: %s", view)
+		if !strings.Contains(view, "saved") {
+			t.Errorf("expected 'saved' in view, got: %s", view)
 		}
 	})
 

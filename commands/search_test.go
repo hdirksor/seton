@@ -465,7 +465,7 @@ func TestSearchModelView(t *testing.T) {
 		}
 	})
 
-	t.Run("results phase view with multiple notes shows separator", func(t *testing.T) {
+	t.Run("results phase view with multiple notes shows both notes in cards", func(t *testing.T) {
 		notes := []store.Note{
 			{ID: 1, Text: "first note", Tags: []string{"#auth"}},
 			{ID: 2, Text: "second note", Tags: []string{"#auth"}},
@@ -482,9 +482,6 @@ func TestSearchModelView(t *testing.T) {
 		view := m4.View()
 		if !strings.Contains(view, "first note") || !strings.Contains(view, "second note") {
 			t.Errorf("expected both notes in view, got: %s", view)
-		}
-		if !strings.Contains(view, strings.Repeat("-", 40)) {
-			t.Errorf("expected separator between notes, got: %s", view)
 		}
 	})
 

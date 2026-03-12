@@ -7,9 +7,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/hdicksonjr/seton/config"
 	"github.com/hdicksonjr/seton/store"
+	"github.com/hdicksonjr/seton/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -187,41 +187,40 @@ func (m searchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-var (
-	selectedTagStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#6BCB77", Light: "#2E7D32"})
-	cursorTagStyle   = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#64B5F6", Light: "#1565C0"}).Bold(true)
-	dimTagStyle      = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#9E9E9E", Light: "#616161"})
-	headerTagStyle   = lipgloss.NewStyle().Bold(true)
-)
 
 func (m searchModel) View() string {
 	if m.phase == searchPhaseResults {
-		return banner + m.resultsView()
+		return styles.View().Render(styles.Banner()+ m.resultsView())
 	}
-	return banner + m.selectView()
+	return styles.View().Render(styles.Banner()+ m.selectView())
 }
 
 func (m searchModel) selectView() string {
 	var b strings.Builder
 
-	b.WriteString(headerTagStyle.Render("Search tags") + "\n\n")
+	b.WriteString(styles.Header().Render("Search tags") + "\n\n")
 	b.WriteString(m.input.View() + "\n\n")
 
 	if len(m.filtered) == 0 {
-		b.WriteString(dimTagStyle.Render("no matching tags") + "\n")
+		b.WriteString(styles.Dim().Render("no matching tags") + "\n")
 	} else {
 		for i, tag := range m.filtered {
-			cursor := "  "
-			if m.focus == searchFocusList && i == m.cursor {
-				cursor = cursorTagStyle.Render("> ")
-			}
+			focused := m.focus == searchFocusList && i == m.cursor
+			sel := m.selected[tag]
 
 			checkbox := "[ ]"
-			if m.selected[tag] {
-				checkbox = selectedTagStyle.Render("[x]")
+			if sel {
+				checkbox = "[x]"
 			}
 
-			b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, checkbox, tag))
+			row := "  " + checkbox + " " + tag
+			if focused {
+				b.WriteString(styles.FocusedRow().Render(row) + "\n")
+			} else if sel {
+				b.WriteString("  " + styles.Selected().Render("[x]") + " " + tag + "\n")
+			} else {
+				b.WriteString(row + "\n")
+			}
 		}
 	}
 
@@ -233,7 +232,7 @@ func (m searchModel) selectView() string {
 	}
 	hint := fmt.Sprintf("\n%d selected · ↑/↓ navigate · space toggle · enter search · q quit",
 		selectedCount)
-	b.WriteString(dimTagStyle.Render(hint))
+	b.WriteString(styles.Dim().Render(hint))
 
 	return b.String()
 }
@@ -246,16 +245,13 @@ func (m searchModel) resultsView() string {
 	} else if len(m.notes) == 0 {
 		b.WriteString("No notes found.\n")
 	} else {
-		for i, n := range m.notes {
-			if i > 0 {
-				b.WriteString(strings.Repeat("-", 40) + "\n")
-			}
-			b.WriteString(fmt.Sprintf("[%d] %s  tags: %s\n\n%s\n",
-				n.ID, n.CreatedAt, strings.Join(n.Tags, " "), n.Text))
+		for _, n := range m.notes {
+			meta := styles.Dim().Render(fmt.Sprintf("#%d · %s · %s", n.ID, n.CreatedAt, strings.Join(n.Tags, " ")))
+			b.WriteString(styles.Card().Render(meta+"\n\n"+n.Text) + "\n")
 		}
 	}
 
-	b.WriteString(dimTagStyle.Render("\nctrl+e export · q quit"))
+	b.WriteString(styles.Dim().Render("\nctrl+e export · q quit"))
 	return b.String()
 }
 
@@ -317,8 +313,9 @@ func runSearch(runProg func(tea.Model) (tea.Model, error)) error {
 	timestamp := time.Now().Format("2006-01-02T15-04-05")
 	path, err := exportNotesFile(final.notes, selected, cfg.Paths.Exports(), timestamp)
 	if err != nil {
+		fmt.Println(styles.Err().Render(fmt.Sprintf("✗  Export failed: %s", err.Error())))
 		return err
 	}
-	fmt.Printf("Written to %s\n", path)
+	fmt.Println(styles.Success().Render(fmt.Sprintf("✓  %d note(s) exported · %s", len(final.notes), path)))
 	return nil
 }

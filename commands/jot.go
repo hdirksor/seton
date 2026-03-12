@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hdicksonjr/seton/config"
 	"github.com/hdicksonjr/seton/store"
+	"github.com/hdicksonjr/seton/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +47,7 @@ func newJotModel() jotModel {
 				Description("Space-separated, e.g. #todo #refactor  ·  ctrl+e to open in editor").
 				Value(&tags),
 		),
-	).WithTheme(huh.ThemeBase())
+	).WithTheme(huh.ThemeCharm())
 	return jotModel{
 		form:     form,
 		noteText: &noteText,
@@ -59,9 +60,14 @@ func (m jotModel) Init() tea.Cmd {
 }
 
 func (m jotModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyCtrlE {
-		m.toEditor = true
-		return m, tea.Quit
+	if key, ok := msg.(tea.KeyMsg); ok {
+		switch key.Type {
+		case tea.KeyCtrlC:
+			return m, tea.Quit
+		case tea.KeyCtrlE:
+			m.toEditor = true
+			return m, tea.Quit
+		}
 	}
 
 	updated, cmd := m.form.Update(msg)
@@ -75,7 +81,7 @@ func (m jotModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m jotModel) View() string {
-	return banner + m.form.View()
+	return styles.View().Render(styles.Banner()+ m.form.View())
 }
 
 // writeNoteFile writes text wrapped in delimiters to a timestamped .md file in
@@ -147,9 +153,34 @@ func runJot(_ *cobra.Command, _ []string) error {
 	defer db.Close()
 
 	if err := store.SaveNote(db, *final.noteText, *final.tags); err != nil {
+		fmt.Println(styles.Err().Render("✗  Failed to save note: " + err.Error()))
 		return err
 	}
 
-	fmt.Println("Note saved.")
+	tags := collectTags(*final.noteText, *final.tags)
+	fmt.Println(styles.Success().Render("✓  " + noteSummary(*final.noteText, tags)))
 	return nil
+}
+
+// collectTags merges tags extracted from the note body with the user-provided
+// tag string, deduplicating while preserving order.
+func collectTags(noteText, userTagsStr string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, t := range store.ExtractTagsFromText(noteText) {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	for _, t := range strings.Fields(userTagsStr) {
+		if !strings.HasPrefix(t, "#") {
+			t = "#" + t
+		}
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out
 }
