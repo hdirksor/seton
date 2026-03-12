@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/huh"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -60,6 +61,28 @@ func TestJotModelNonCtrlEForwardedToForm(t *testing.T) {
 	if updated.toEditor {
 		t.Error("expected toEditor=false for non ctrl+e key")
 	}
+}
+
+func TestJotNoteValidation(t *testing.T) {
+	t.Run("empty note is rejected", func(t *testing.T) {
+		m := newJotModel()
+		// form starts on the note group; attempt to advance with empty text
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		updated := result.(jotModel)
+		if updated.form.State == huh.StateCompleted {
+			t.Error("expected form to remain incomplete when note is empty")
+		}
+	})
+
+	t.Run("whitespace-only note is rejected", func(t *testing.T) {
+		m := newJotModel()
+		*m.noteText = "   "
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		updated := result.(jotModel)
+		if updated.form.State == huh.StateCompleted {
+			t.Error("expected form to remain incomplete when note is whitespace only")
+		}
+	})
 }
 
 func TestWriteNoteFile(t *testing.T) {

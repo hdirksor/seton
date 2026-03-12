@@ -9,6 +9,7 @@ import (
 
 	"github.com/hdicksonjr/seton/config"
 	"github.com/hdicksonjr/seton/store"
+	"github.com/hdicksonjr/seton/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -48,16 +49,18 @@ func runExport(tags []string, dir string) error {
 	}
 
 	if len(notes) == 0 {
+		fmt.Println(styles.Err().Render("✗  No notes found for tags: " + strings.Join(tags, " ")))
 		return fmt.Errorf("no notes found for tags: %s", strings.Join(tags, " "))
 	}
 
 	timestamp := time.Now().Format("2006-01-02T15-04-05")
 	path, err := exportNotesFile(notes, tags, dir, timestamp)
 	if err != nil {
+		fmt.Println(styles.Err().Render("✗  Export failed: " + err.Error()))
 		return err
 	}
 
-	fmt.Printf("Written to %s\n", path)
+	fmt.Println(styles.Success().Render(fmt.Sprintf("✓  %d note(s) exported · %s", len(notes), path)))
 	return nil
 }
 

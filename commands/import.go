@@ -9,9 +9,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/hdicksonjr/seton/config"
 	"github.com/hdicksonjr/seton/store"
+	"github.com/hdicksonjr/seton/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -136,38 +136,32 @@ func (m importModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-var (
-	importHeaderStyle = lipgloss.NewStyle().Bold(true)
-	importBlockStyle  = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				Padding(0, 1).
-				Foreground(lipgloss.AdaptiveColor{Dark: "#CED4DA", Light: "#343A40"})
-	importHintStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#9E9E9E", Light: "#616161"})
-	importErrStyle  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "#EF5350", Light: "#B71C1C"}).Bold(true)
-)
 
 func (m importModel) View() string {
 	if m.quitting {
-		return fmt.Sprintf("\nAborted. %d saved, %d skipped.\n", m.saved, m.skipped)
+		if m.saved > 0 {
+			return "\n" + styles.Warn().Render(fmt.Sprintf("⚠  Aborted · %d saved · %d skipped", m.saved, m.skipped)) + "\n"
+		}
+		return "\n" + styles.Warn().Render("⚠  Aborted · nothing saved") + "\n"
 	}
 	if m.completed {
-		return fmt.Sprintf("\nDone. %d saved, %d skipped.\n", m.saved, m.skipped)
+		return "\n" + styles.Success().Render(fmt.Sprintf("✓  %d saved · %d skipped", m.saved, m.skipped)) + "\n"
 	}
 	if m.current >= len(m.blocks) {
 		return ""
 	}
 
 	var b strings.Builder
-	b.WriteString(banner)
-	b.WriteString(importHeaderStyle.Render(
+	b.WriteString(styles.Banner())
+	b.WriteString(styles.Header().Render(
 		fmt.Sprintf("Block %d / %d", m.current+1, len(m.blocks))) + "\n\n")
-	b.WriteString(importBlockStyle.Render(m.blocks[m.current]) + "\n\n")
+	b.WriteString(styles.Block().Render(m.blocks[m.current]) + "\n\n")
 	b.WriteString("Tags: " + m.tagInput.View() + "\n")
 	if m.saveErr != nil {
-		b.WriteString(importErrStyle.Render("Error: "+m.saveErr.Error()) + "\n")
+		b.WriteString(styles.Err().Render("Error: "+m.saveErr.Error()) + "\n")
 	}
-	b.WriteString(importHintStyle.Render("ctrl+s save · ctrl+k skip · ctrl+c quit"))
-	return b.String()
+	b.WriteString(styles.Dim().Render("ctrl+s save · ctrl+k skip · ctrl+c quit"))
+	return styles.View().Render(b.String())
 }
 
 func importCmd() *cobra.Command {
