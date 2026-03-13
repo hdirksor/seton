@@ -1,3 +1,6 @@
+// Package styles provides the theming system for seton's terminal UI.
+// It defines the [Theme] interface and a [DefaultTheme] implementation using
+// the ANSI 16-color palette. Set [Active] to swap themes application-wide.
 package styles
 
 import "github.com/charmbracelet/lipgloss"
@@ -21,7 +24,8 @@ type Theme interface {
 // Active is the theme used throughout the application.
 var Active Theme = DefaultTheme{}
 
-// Convenience functions delegating to Active.
+// The following functions are convenience shorthands that delegate to [Active].
+// They allow call sites to write styles.Success() instead of styles.Active.Success().
 
 func Banner() string          { return Active.Banner() }
 func View() lipgloss.Style    { return Active.View() }

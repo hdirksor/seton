@@ -1,3 +1,4 @@
+// Package store manages the SQLite database that persists seton notes and tags.
 package store
 
 import (
@@ -8,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hdicksonjr/seton/config"
 	_ "modernc.org/sqlite"
 )
 
@@ -158,12 +160,13 @@ func applyMigrations(db *sql.DB) error {
 	return nil
 }
 
+// Open opens (or creates) the seton SQLite database at ~/.seton/notes.db,
+// applies any pending schema migrations, and returns the connection.
 func Open() (*sql.DB, error) {
-	home, err := os.UserHomeDir()
+	dir, err := config.AppDir()
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Join(home, ".seton")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
@@ -220,6 +223,8 @@ func findOrCreateTag(tx *sql.Tx, name string) (int64, error) {
 	return id, nil
 }
 
+// SaveNote inserts a new note with the given text and space-separated tag string.
+// Tags are merged from both the text body (inline #tags) and userTags.
 func SaveNote(db *sql.DB, text, userTags string) error {
 	tags := mergeTags(ExtractTagsFromText(text), strings.Fields(userTags))
 
