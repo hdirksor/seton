@@ -10,9 +10,9 @@ import (
 
 	"github.com/charmbracelet/huh"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hdicksonjr/seton/config"
-	"github.com/hdicksonjr/seton/store"
-	"github.com/hdicksonjr/seton/styles"
+	"github.com/hdirksor/seton/config"
+	"github.com/hdirksor/seton/store"
+	"github.com/hdirksor/seton/styles"
 	"github.com/spf13/cobra"
 )
 

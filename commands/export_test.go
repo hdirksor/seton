@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hdicksonjr/seton/store"
+	"github.com/hdirksor/seton/store"
 )
 
 func TestBuildFilename(t *testing.T) {

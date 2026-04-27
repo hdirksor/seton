@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hdicksonjr/seton/store"
+	"github.com/hdirksor/seton/store"
 )
 
 var noopQuery = func(_ []string) ([]store.Note, error) { return nil, nil }

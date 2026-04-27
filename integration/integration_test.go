@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hdicksonjr/seton/commands"
-	"github.com/hdicksonjr/seton/store"
+	"github.com/hdirksor/seton/commands"
+	"github.com/hdirksor/seton/store"
 )
 
 // rootCmd builds a fresh cobra root and redirects output to the returned buffer.

@@ -1,4 +1,4 @@
-module github.com/hdicksonjr/seton
+module github.com/hdirksor/seton
 
 go 1.24.0
 
