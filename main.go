@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/hdicksonjr/seton/commands"
+	"github.com/hdirksor/seton/commands"
 )
 
 func main() {

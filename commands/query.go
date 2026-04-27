@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hdicksonjr/seton/store"
+	"github.com/hdirksor/seton/store"
 	"github.com/spf13/cobra"
 )
 
