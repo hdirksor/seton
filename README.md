@@ -1,35 +1,6 @@
 # seton
 
-A CLI tool for managing notes embedded directly in source files and saved to a local database.
-
-## Installation
-
-### Download a binary
-
-Download the latest release for your platform from the [releases page](https://github.com/hdirksor/seton/releases).
-
-### Install with Go
-
-```bash
-go install github.com/hdirksor/seton@latest
-```
-
-### Build from source
-
-```bash
-git clone https://github.com/hdirksor/seton
-cd seton
-go build -o seton .
-```
-
-## Note Format
-
-Wrap notes with `~!` and `!~` delimiters and tag them with `#hashtags`:
-
-```
-~! This needs refactoring #tech-debt !~
-~! Ask team about this approach #question #auth !~
-```
+A CLI for managing notes. This tool is designed for a tag-centric approach to note taking and referencing. Seton provides three basic modes of functionality in note taking, querying and exporting. Seton stores your notes in a local SQLite database and provides a simple interfaces to quickly take a note, query your note collection using tags, and to export the results of those queries.
 
 ## Usage
 
@@ -89,7 +60,27 @@ close = "!~"
 [paths]
 root = "~/seton"
 ```
+## Installation
+
+### Download a binary
+
+Download the latest release for your platform from the [releases page](https://github.com/hdirksor/seton/releases).
+
+### Install with Go
+
+```bash
+go install github.com/hdirksor/seton@latest
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/hdirksor/seton
+cd seton
+go build -o seton .
+```
 
 ## License
 
 MIT
+
