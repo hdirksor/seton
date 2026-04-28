@@ -22,6 +22,8 @@ func TestNormalizeTags(t *testing.T) {
 		{[]string{"#todo", "#auth"}, []string{"#todo", "#auth"}},
 		{[]string{"todo", "#auth"}, []string{"#todo", "#auth"}},
 		{nil, nil},
+		{[]string{"TODO", "Auth"}, []string{"#todo", "#auth"}},
+		{[]string{"#TODO", "#Auth"}, []string{"#todo", "#auth"}},
 	}
 
 	for _, c := range cases {

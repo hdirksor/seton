@@ -136,6 +136,50 @@ func TestSaveNote(t *testing.T) {
 	})
 }
 
+func TestSaveNoteTagCaseInsensitivity(t *testing.T) {
+	t.Run("mixed-case tag stored as lowercase", func(t *testing.T) {
+		db := openTestDB(t)
+		defer db.Close()
+
+		if err := SaveNote(db, "hello world", "#TODO"); err != nil {
+			t.Fatalf("SaveNote returned error: %v", err)
+		}
+
+		names := tagNamesForNote(t, db, 1)
+		if len(names) != 1 || names[0] != "#todo" {
+			t.Errorf("expected [#todo], got %v", names)
+		}
+	})
+
+	t.Run("same tag different cases deduplicated", func(t *testing.T) {
+		db := openTestDB(t)
+		defer db.Close()
+
+		if err := SaveNote(db, "fix the #Auth login bug", "#AUTH"); err != nil {
+			t.Fatalf("SaveNote returned error: %v", err)
+		}
+
+		names := tagNamesForNote(t, db, 1)
+		if len(names) != 1 {
+			t.Errorf("expected 1 tag (deduplicated), got %d: %v", len(names), names)
+		}
+	})
+
+	t.Run("uppercase body tag and lowercase user tag deduplicated", func(t *testing.T) {
+		db := openTestDB(t)
+		defer db.Close()
+
+		if err := SaveNote(db, "task with #BUG", "bug"); err != nil {
+			t.Fatalf("SaveNote returned error: %v", err)
+		}
+
+		names := tagNamesForNote(t, db, 1)
+		if len(names) != 1 {
+			t.Errorf("expected 1 tag, got %d: %v", len(names), names)
+		}
+	})
+}
+
 func TestQueryNotes(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
