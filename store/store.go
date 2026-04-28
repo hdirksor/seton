@@ -190,6 +190,7 @@ func mergeTags(bodyTags, userTags []string) []string {
 	var out []string
 
 	for _, tag := range bodyTags {
+		tag = strings.ToLower(tag)
 		if !seen[tag] {
 			seen[tag] = true
 			out = append(out, tag)
@@ -199,6 +200,7 @@ func mergeTags(bodyTags, userTags []string) []string {
 		if !strings.HasPrefix(tag, "#") {
 			tag = "#" + tag
 		}
+		tag = strings.ToLower(tag)
 		if !seen[tag] {
 			seen[tag] = true
 			out = append(out, tag)

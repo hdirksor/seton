@@ -19,7 +19,7 @@ func normalizeTags(tags []string) []string {
 		if !strings.HasPrefix(t, "#") {
 			t = "#" + t
 		}
-		out[i] = t
+		out[i] = strings.ToLower(t)
 	}
 	return out
 }
