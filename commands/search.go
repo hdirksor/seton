@@ -23,7 +23,7 @@ const (
 type searchPhase int
 
 const (
-	searchPhaseSelect  searchPhase = iota
+	searchPhaseSelect searchPhase = iota
 	searchPhaseResults
 )
 
@@ -187,12 +187,11 @@ func (m searchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-
 func (m searchModel) View() string {
 	if m.phase == searchPhaseResults {
-		return styles.View().Render(styles.Banner()+ m.resultsView())
+		return styles.View().Render(styles.Banner() + m.resultsView())
 	}
-	return styles.View().Render(styles.Banner()+ m.selectView())
+	return styles.View().Render(styles.Banner() + m.selectView())
 }
 
 func (m searchModel) selectView() string {

@@ -23,17 +23,17 @@ var Active Theme = DefaultTheme{}
 
 // Convenience functions delegating to Active.
 
-func Banner() string          { return Active.Banner() }
-func View() lipgloss.Style    { return Active.View() }
-func Header() lipgloss.Style  { return Active.Header() }
-func Dim() lipgloss.Style     { return Active.Dim() }
-func Success() lipgloss.Style { return Active.Success() }
-func Warn() lipgloss.Style    { return Active.Warn() }
-func Err() lipgloss.Style     { return Active.Err() }
-func Selected() lipgloss.Style  { return Active.Selected() }
+func Banner() string             { return Active.Banner() }
+func View() lipgloss.Style       { return Active.View() }
+func Header() lipgloss.Style     { return Active.Header() }
+func Dim() lipgloss.Style        { return Active.Dim() }
+func Success() lipgloss.Style    { return Active.Success() }
+func Warn() lipgloss.Style       { return Active.Warn() }
+func Err() lipgloss.Style        { return Active.Err() }
+func Selected() lipgloss.Style   { return Active.Selected() }
 func FocusedRow() lipgloss.Style { return Active.FocusedRow() }
-func Card() lipgloss.Style    { return Active.Card() }
-func Block() lipgloss.Style   { return Active.Block() }
+func Card() lipgloss.Style       { return Active.Card() }
+func Block() lipgloss.Style      { return Active.Block() }
 
 // DefaultTheme is the built-in ANSI 16-color theme.
 type DefaultTheme struct{}
