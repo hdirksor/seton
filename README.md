@@ -2,6 +2,7 @@
 
 A CLI for managing notes. This tool is designed for a tag-centric approach to note taking and referencing. Seton provides three basic modes of functionality in note taking, querying and exporting. Seton stores your notes in a local SQLite database and provides a simple interfaces to quickly take a note, query your note collection using tags, and to export the results of those queries.
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/hdirksor/seton)](https://goreportcard.com/report/github.com/hdirksor/seton)
 ## Usage
 
 ### Jot a note

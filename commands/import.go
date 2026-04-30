@@ -54,12 +54,12 @@ func archiveFile(src, archiveDir, date string) error {
 
 // importModel is a bubbletea model for the step-by-step import wizard.
 type importModel struct {
-	blocks   []string
-	current  int
-	tagInput textinput.Model
-	save     func(text, tags string) error
-	saved    int
-	skipped  int
+	blocks    []string
+	current   int
+	tagInput  textinput.Model
+	save      func(text, tags string) error
+	saved     int
+	skipped   int
 	completed bool
 	quitting  bool
 	saveErr   error
@@ -135,7 +135,6 @@ func (m importModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.tagInput, cmd = m.tagInput.Update(msg)
 	return m, cmd
 }
-
 
 func (m importModel) View() string {
 	if m.quitting {

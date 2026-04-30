@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/hdirksor/seton/config"
 	"github.com/hdirksor/seton/store"
 	"github.com/hdirksor/seton/styles"
@@ -81,7 +81,7 @@ func (m jotModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m jotModel) View() string {
-	return styles.View().Render(styles.Banner()+ m.form.View())
+	return styles.View().Render(styles.Banner() + m.form.View())
 }
 
 // writeNoteFile writes text wrapped in delimiters to a timestamped .md file in
