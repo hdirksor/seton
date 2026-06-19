@@ -1,15 +1,20 @@
+// Package config handles loading and resolving seton configuration.
 package config
 
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/BurntSushi/toml"
 )
 
+// AppDir returns the directory where seton stores config and data files.
+func AppDir() (string, error) {
+	return platform.AppDir()
+}
+
 // ResolveEditor returns the editor to use when opening files. It checks the
-// config value first, then $EDITOR, then falls back to "vi".
+// config value first, then $EDITOR, then falls back to the platform default.
 func (c Config) ResolveEditor() string {
 	if c.Editor != "" {
 		return c.Editor
@@ -17,7 +22,7 @@ func (c Config) ResolveEditor() string {
 	if e := os.Getenv("EDITOR"); e != "" {
 		return e
 	}
-	return "vi"
+	return platform.DefaultEditor()
 }
 
 // Delimiters holds the open/close markers used to identify notes in a file.
@@ -34,14 +39,7 @@ type Paths struct {
 
 // expandRoot resolves ~ in Root to the user's home directory.
 func (p Paths) expandRoot() string {
-	if strings.HasPrefix(p.Root, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return p.Root
-		}
-		return filepath.Join(home, p.Root[2:])
-	}
-	return p.Root
+	return platform.ExpandTilde(p.Root)
 }
 
 // Notes returns the directory where the user writes source note files.
@@ -78,17 +76,17 @@ func defaults() Config {
 	}
 }
 
-// Load reads ~/.seton/config.toml and returns the result merged with defaults.
+// Load reads config.toml from the platform app dir and returns the result merged with defaults.
 // If the file does not exist, defaults are returned with no error.
 func Load() (Config, error) {
 	cfg := defaults()
 
-	home, err := os.UserHomeDir()
+	dir, err := platform.AppDir()
 	if err != nil {
 		return cfg, err
 	}
 
-	path := filepath.Join(home, ".seton", "config.toml")
+	path := filepath.Join(dir, "config.toml")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return cfg, nil
 	}

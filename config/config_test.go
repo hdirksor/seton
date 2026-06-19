@@ -6,9 +6,18 @@ import (
 	"testing"
 )
 
+// setupTestHome sets env vars so that platform.AppDir() and os.UserHomeDir()
+// both resolve to dir on all platforms.
+func setupTestHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("APPDATA", filepath.Join(dir, "appdata", "roaming"))
+}
+
 func TestLoadReturnsDefaults(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setupTestHome(t, home)
 
 	cfg, err := Load()
 	if err != nil {
@@ -33,9 +42,14 @@ func TestLoadReturnsDefaults(t *testing.T) {
 
 func TestLoadReadsConfigFile(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	os.MkdirAll(filepath.Join(dir, ".seton"), 0755)
-	os.WriteFile(filepath.Join(dir, ".seton", "config.toml"), []byte(`
+	setupTestHome(t, dir)
+
+	configDir, err := platform.AppDir()
+	if err != nil {
+		t.Fatalf("could not resolve app dir: %v", err)
+	}
+	os.MkdirAll(configDir, 0755)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(`
 [delimiters]
 open  = "<<"
 close = ">>"
@@ -55,10 +69,15 @@ close = ">>"
 
 func TestLoadPartialConfigKeepsDefaults(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	os.MkdirAll(filepath.Join(dir, ".seton"), 0755)
+	setupTestHome(t, dir)
+
+	configDir, err := platform.AppDir()
+	if err != nil {
+		t.Fatalf("could not resolve app dir: %v", err)
+	}
 	// Only override open — close should remain the default.
-	os.WriteFile(filepath.Join(dir, ".seton", "config.toml"), []byte(`
+	os.MkdirAll(configDir, 0755)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(`
 [delimiters]
 open = "<<"
 `), 0644)
@@ -77,9 +96,14 @@ open = "<<"
 
 func TestCustomRootPath(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	os.MkdirAll(filepath.Join(dir, ".seton"), 0755)
-	os.WriteFile(filepath.Join(dir, ".seton", "config.toml"), []byte(`
+	setupTestHome(t, dir)
+
+	configDir, err := platform.AppDir()
+	if err != nil {
+		t.Fatalf("could not resolve app dir: %v", err)
+	}
+	os.MkdirAll(configDir, 0755)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(`
 [paths]
 root = "/tmp/my-notes"
 `), 0644)
@@ -115,11 +139,11 @@ func TestResolveEditor(t *testing.T) {
 		}
 	})
 
-	t.Run("falls back to vi when neither set", func(t *testing.T) {
+	t.Run("falls back to platform default when neither set", func(t *testing.T) {
 		t.Setenv("EDITOR", "")
 		cfg := Config{}
-		if got := cfg.ResolveEditor(); got != "vi" {
-			t.Errorf("expected vi, got %s", got)
+		if got := cfg.ResolveEditor(); got != platform.DefaultEditor() {
+			t.Errorf("expected platform default %q, got %q", platform.DefaultEditor(), got)
 		}
 	})
 
@@ -134,9 +158,14 @@ func TestResolveEditor(t *testing.T) {
 
 func TestEditorConfigFile(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	os.MkdirAll(filepath.Join(dir, ".seton"), 0755)
-	os.WriteFile(filepath.Join(dir, ".seton", "config.toml"), []byte(`
+	setupTestHome(t, dir)
+
+	configDir, err := platform.AppDir()
+	if err != nil {
+		t.Fatalf("could not resolve app dir: %v", err)
+	}
+	os.MkdirAll(configDir, 0755)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(`
 editor = "code --wait"
 `), 0644)
 
@@ -151,9 +180,14 @@ editor = "code --wait"
 
 func TestTildeExpansion(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	os.MkdirAll(filepath.Join(dir, ".seton"), 0755)
-	os.WriteFile(filepath.Join(dir, ".seton", "config.toml"), []byte(`
+	setupTestHome(t, dir)
+
+	configDir, err := platform.AppDir()
+	if err != nil {
+		t.Fatalf("could not resolve app dir: %v", err)
+	}
+	os.MkdirAll(configDir, 0755)
+	os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(`
 [paths]
 root = "~/custom"
 `), 0644)

@@ -1,3 +1,4 @@
+// Package commands implements the seton CLI subcommands.
 package commands
 
 import (
@@ -36,10 +37,10 @@ func noteSummary(text string, tags []string) string {
 	return preview + "  " + strings.Join(tagParts, "  ")
 }
 
-// InitRootCmd Initializes entire CLI interface
+// InitRootCmd builds and returns the root cobra command with all subcommands registered.
 func InitRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:   "Note Management",
+		Use:   "seton",
 		Short: "A CLI to manage notes",
 		Long:  `A CLI to make taking and managing notes more simple`,
 	}
