@@ -49,6 +49,7 @@ func InitRootCmd() *cobra.Command {
 	rootCmd.AddCommand(exportCmd())
 	rootCmd.AddCommand(searchCmd())
 	rootCmd.AddCommand(importCmd())
+	rootCmd.AddCommand(tagsCmd())
 
 	return rootCmd
 }

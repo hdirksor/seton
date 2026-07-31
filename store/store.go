@@ -276,6 +276,45 @@ func ListTags(db *sql.DB) ([]string, error) {
 	return tags, rows.Err()
 }
 
+// Tag represents a row from the tags table along with its usage count.
+type Tag struct {
+	Name        string
+	Description string
+	NoteCount   int
+}
+
+// ListTagsWithCounts returns every tag with its description and the number of
+// notes it is attached to, sorted alphabetically by name.
+func ListTagsWithCounts(db *sql.DB) ([]Tag, error) {
+	rows, err := db.Query(`
+		SELECT t.name, COALESCE(t.description, ''), COUNT(nt.note_id)
+		FROM tags t
+		LEFT JOIN note_tags nt ON nt.tag_id = t.id
+		GROUP BY t.id
+		ORDER BY t.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tags []Tag
+	for rows.Next() {
+		var t Tag
+		if err := rows.Scan(&t.Name, &t.Description, &t.NoteCount); err != nil {
+			return nil, err
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
+}
+
+// UpdateTagDescription sets the description for the tag with the given name.
+// It is a no-op if no tag with that name exists.
+func UpdateTagDescription(db *sql.DB, name, description string) error {
+	_, err := db.Exec(`UPDATE tags SET description = ? WHERE name = ?`, description, name)
+	return err
+}
+
 // Note represents a row from the notes table with its associated tags.
 type Note struct {
 	ID        int

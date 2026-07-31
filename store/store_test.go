@@ -265,6 +265,80 @@ func TestListTags(t *testing.T) {
 	}
 }
 
+func TestListTagsWithCounts(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	SaveNote(db, "a note", "#todo #auth")
+	SaveNote(db, "another note", "#auth #bug")
+	SaveNote(db, "third note", "#auth")
+
+	tags, err := ListTagsWithCounts(db)
+	if err != nil {
+		t.Fatalf("ListTagsWithCounts returned error: %v", err)
+	}
+	if len(tags) != 3 {
+		t.Fatalf("expected 3 distinct tags, got %d: %v", len(tags), tags)
+	}
+
+	// Alphabetical order: #auth, #bug, #todo
+	if tags[0].Name != "#auth" || tags[0].NoteCount != 3 {
+		t.Errorf("expected #auth with count 3, got %+v", tags[0])
+	}
+	if tags[1].Name != "#bug" || tags[1].NoteCount != 1 {
+		t.Errorf("expected #bug with count 1, got %+v", tags[1])
+	}
+	if tags[2].Name != "#todo" || tags[2].NoteCount != 1 {
+		t.Errorf("expected #todo with count 1, got %+v", tags[2])
+	}
+
+	t.Run("description defaults to empty string", func(t *testing.T) {
+		if tags[0].Description != "" {
+			t.Errorf("expected empty description, got %q", tags[0].Description)
+		}
+	})
+}
+
+func TestUpdateTagDescription(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	SaveNote(db, "a note", "#todo")
+
+	t.Run("sets description for existing tag", func(t *testing.T) {
+		if err := UpdateTagDescription(db, "#todo", "things to do"); err != nil {
+			t.Fatalf("UpdateTagDescription returned error: %v", err)
+		}
+
+		tags, err := ListTagsWithCounts(db)
+		if err != nil {
+			t.Fatalf("ListTagsWithCounts returned error: %v", err)
+		}
+		if tags[0].Description != "things to do" {
+			t.Errorf("expected updated description, got %q", tags[0].Description)
+		}
+	})
+
+	t.Run("overwrites an existing description", func(t *testing.T) {
+		UpdateTagDescription(db, "#todo", "first")
+		UpdateTagDescription(db, "#todo", "second")
+
+		tags, err := ListTagsWithCounts(db)
+		if err != nil {
+			t.Fatalf("ListTagsWithCounts returned error: %v", err)
+		}
+		if tags[0].Description != "second" {
+			t.Errorf("expected overwritten description, got %q", tags[0].Description)
+		}
+	})
+
+	t.Run("unknown tag name is a no-op, not an error", func(t *testing.T) {
+		if err := UpdateTagDescription(db, "#doesnotexist", "x"); err != nil {
+			t.Errorf("expected nil error for unknown tag, got %v", err)
+		}
+	})
+}
+
 func TestOpen(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
