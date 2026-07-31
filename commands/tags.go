@@ -18,22 +18,62 @@ const (
 	tagsPhaseEntity
 )
 
+type tagsFocus int
+
+const (
+	tagsFocusInput tagsFocus = iota
+	tagsFocusList
+)
+
 type tagsModel struct {
-	tags      []store.Tag
-	cursor    int
-	height    int
-	phase     tagsPhase
-	descInput textinput.Model
-	saveFn    func(name, description string) error
-	saveErr   error
+	tags        []store.Tag
+	filtered    []store.Tag
+	filterInput textinput.Model
+	focus       tagsFocus
+	cursor      int
+	height      int
+	phase       tagsPhase
+	descInput   textinput.Model
+	saveFn      func(name, description string) error
+	saveErr     error
 }
 
 func initialTagsModel(tags []store.Tag, saveFn func(name, description string) error) tagsModel {
+	fi := textinput.New()
+	fi.Placeholder = "type to filter tags..."
+	fi.Width = 40
+	fi.Focus()
+
+	filtered := make([]store.Tag, len(tags))
+	copy(filtered, tags)
+
 	return tagsModel{
-		tags:      tags,
-		descInput: textinput.New(),
-		saveFn:    saveFn,
+		tags:        tags,
+		filtered:    filtered,
+		filterInput: fi,
+		descInput:   textinput.New(),
+		saveFn:      saveFn,
 	}
+}
+
+// filterStoreTags returns tags whose names contain query as a substring
+// (case-insensitive). The "#" prefix is stripped from both sides before
+// comparison.
+func filterStoreTags(tags []store.Tag, query string) []store.Tag {
+	if query == "" {
+		out := make([]store.Tag, len(tags))
+		copy(out, tags)
+		return out
+	}
+	q := strings.ToLower(strings.TrimPrefix(query, "#"))
+	var out []store.Tag
+	for _, tag := range tags {
+		name := strings.ToLower(strings.TrimPrefix(tag.Name, "#"))
+		if strings.Contains(name, q) {
+			out = append(out, tag)
+		}
+	}
+	return out
 }
 
 func (m tagsModel) Init() tea.Cmd {
@@ -62,6 +102,32 @@ func (m tagsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m tagsModel) updateList(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.focus == tagsFocusInput {
+		return m.updateFilterInput(key)
+	}
+	return m.updateTagList(key)
+}
+
+func (m tagsModel) updateFilterInput(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch key.Type {
+	case tea.KeyEsc:
+		return m, tea.Quit
+	case tea.KeyDown:
+		if len(m.filtered) > 0 {
+			m.focus = tagsFocusList
+			m.cursor = 0
+			m.filterInput.Blur()
+		}
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.filterInput, cmd = m.filterInput.Update(key)
+	m.filtered = filterStoreTags(m.tags, m.filterInput.Value())
+	return m, cmd
+}
+
+func (m tagsModel) updateTagList(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.Type {
 	case tea.KeyEsc:
 		return m, tea.Quit
@@ -70,17 +136,20 @@ func (m tagsModel) updateList(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case tea.KeyUp:
-		if m.cursor > 0 {
+		if m.cursor == 0 {
+			m.focus = tagsFocusInput
+			m.filterInput.Focus()
+		} else {
 			m.cursor--
 		}
 	case tea.KeyDown:
-		if m.cursor < len(m.tags)-1 {
+		if m.cursor < len(m.filtered)-1 {
 			m.cursor++
 		}
 	case tea.KeyEnter:
-		if len(m.tags) > 0 {
+		if len(m.filtered) > 0 {
 			m.phase = tagsPhaseEntity
-			m.descInput.SetValue(m.tags[m.cursor].Description)
+			m.descInput.SetValue(m.filtered[m.cursor].Description)
 			m.descInput.Focus()
 		}
 	}
@@ -102,13 +171,19 @@ func (m tagsModel) updateEntity(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m tagsModel) saveDescription() (tea.Model, tea.Cmd) {
+	tag := m.filtered[m.cursor]
 	desc := m.descInput.Value()
-	if err := m.saveFn(m.tags[m.cursor].Name, desc); err != nil {
+	if err := m.saveFn(tag.Name, desc); err != nil {
 		m.saveErr = err
 		return m, nil
 	}
 	m.saveErr = nil
-	m.tags[m.cursor].Description = desc
+	for i := range m.tags {
+		if m.tags[i].Name == tag.Name {
+			m.tags[i].Description = desc
+		}
+	}
+	m.filtered = filterStoreTags(m.tags, m.filterInput.Value())
 	m.phase = tagsPhaseList
 	return m, nil
 }
@@ -126,23 +201,28 @@ func (m tagsModel) listView() string {
 
 	var b strings.Builder
 	b.WriteString(header)
+	b.WriteString(m.filterInput.View() + "\n\n")
 
-	start, end := m.visibleTagRange(header, footer)
-	for i := start; i < end; i++ {
-		tag := m.tags[i]
-		noteWord := "notes"
-		if tag.NoteCount == 1 {
-			noteWord = "note"
-		}
-		cursor := "  "
-		if i == m.cursor {
-			cursor = "> "
-		}
-		row := fmt.Sprintf("%s%s  (%d %s)", cursor, tag.Name, tag.NoteCount, noteWord)
-		if i == m.cursor {
-			b.WriteString(styles.FocusedRow().Render(row) + "\n")
-		} else {
-			b.WriteString(row + "\n")
+	if len(m.filtered) == 0 {
+		b.WriteString(styles.Dim().Render("no matching tags") + "\n")
+	} else {
+		start, end := m.visibleTagRange(header, footer)
+		for i := start; i < end; i++ {
+			tag := m.filtered[i]
+			noteWord := "notes"
+			if tag.NoteCount == 1 {
+				noteWord = "note"
+			}
+			cursor := "  "
+			if i == m.cursor {
+				cursor = "> "
+			}
+			row := fmt.Sprintf("%s%s  (%d %s)", cursor, tag.Name, tag.NoteCount, noteWord)
+			if i == m.cursor {
+				b.WriteString(styles.FocusedRow().Render(row) + "\n")
+			} else {
+				b.WriteString(row + "\n")
+			}
 		}
 	}
 
@@ -150,31 +230,31 @@ func (m tagsModel) listView() string {
 	return b.String()
 }
 
-// visibleTagRange returns the slice of m.tags to render, scrolled so the
+// visibleTagRange returns the slice of m.filtered to render, scrolled so the
 // cursor row always stays on screen once the terminal height is known.
 // Before the first tea.WindowSizeMsg arrives, m.height is 0 and the whole
 // list is shown.
 func (m tagsModel) visibleTagRange(header, footer string) (int, int) {
 	if m.height <= 0 {
-		return 0, len(m.tags)
+		return 0, len(m.filtered)
 	}
 
-	chrome := styles.View().Render(styles.Banner() + header + footer)
+	chrome := styles.View().Render(styles.Banner() + header + m.filterInput.View() + "\n\n" + footer)
 	reserved := len(strings.Split(chrome, "\n"))
 	visible := max(m.height-reserved, 1)
-	if visible >= len(m.tags) {
-		return 0, len(m.tags)
+	if visible >= len(m.filtered) {
+		return 0, len(m.filtered)
 	}
 
 	start := max(m.cursor-visible/2, 0)
-	start = min(start, len(m.tags)-visible)
+	start = min(start, len(m.filtered)-visible)
 	return start, start + visible
 }
 
 func (m tagsModel) entityView() string {
 	var b strings.Builder
 
-	tag := m.tags[m.cursor]
+	tag := m.filtered[m.cursor]
 	noteWord := "notes"
 	if tag.NoteCount == 1 {
 		noteWord = "note"

@@ -30,6 +30,26 @@ func seedTaggedNotes(t *testing.T) {
 	}
 }
 
+// isQuit reports whether cmd is a tea.Quit command, distinguishing it from
+// other non-nil commands (e.g. textinput's cursor-blink command).
+func isQuit(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
+}
+
+// typeString sends each rune of s as a KeyRunes message and returns the
+// resulting model.
+func typeString(m tagsModel, s string) tagsModel {
+	for _, ch := range s {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		m = result.(tagsModel)
+	}
+	return m
+}
+
 func TestInitialTagsModel(t *testing.T) {
 	tags := []store.Tag{{Name: "#auth", NoteCount: 2}, {Name: "#todo", NoteCount: 1}}
 	m := initialTagsModel(tags, noopSaveDescription)
@@ -37,16 +57,127 @@ func TestInitialTagsModel(t *testing.T) {
 	if m.phase != tagsPhaseList {
 		t.Errorf("expected initial phase to be list")
 	}
+	if m.focus != tagsFocusInput {
+		t.Errorf("expected initial focus to be the filter input")
+	}
 	if m.cursor != 0 {
 		t.Errorf("expected cursor at 0, got %d", m.cursor)
 	}
+	if len(m.filtered) != len(tags) {
+		t.Errorf("expected filtered list to start with all tags, got %d", len(m.filtered))
+	}
+	if !m.filterInput.Focused() {
+		t.Error("expected filter input to be focused by default")
+	}
+	if m.filterInput.Placeholder != "type to filter tags..." {
+		t.Errorf("expected filter placeholder, got %q", m.filterInput.Placeholder)
+	}
+}
+
+func TestFilterStoreTags(t *testing.T) {
+	tags := []store.Tag{{Name: "#auth"}, {Name: "#bug"}, {Name: "#todo"}}
+
+	t.Run("empty query returns all tags", func(t *testing.T) {
+		out := filterStoreTags(tags, "")
+		if len(out) != 3 {
+			t.Errorf("expected all 3 tags, got %d", len(out))
+		}
+	})
+
+	t.Run("matches substring case-insensitively", func(t *testing.T) {
+		out := filterStoreTags(tags, "TO")
+		if len(out) != 1 || out[0].Name != "#todo" {
+			t.Errorf("expected only #todo, got %v", out)
+		}
+	})
+
+	t.Run("strips # prefix from query before comparing", func(t *testing.T) {
+		out := filterStoreTags(tags, "#bug")
+		if len(out) != 1 || out[0].Name != "#bug" {
+			t.Errorf("expected only #bug, got %v", out)
+		}
+	})
+
+	t.Run("no match returns empty", func(t *testing.T) {
+		out := filterStoreTags(tags, "zzz")
+		if len(out) != 0 {
+			t.Errorf("expected no matches, got %v", out)
+		}
+	})
+}
+
+func TestTagsModelFilterInput(t *testing.T) {
+	tags := []store.Tag{{Name: "#auth"}, {Name: "#bug"}, {Name: "#todo"}}
+
+	t.Run("typing narrows the filtered list", func(t *testing.T) {
+		m := initialTagsModel(tags, noopSaveDescription)
+		m = typeString(m, "to")
+		if len(m.filtered) != 1 || m.filtered[0].Name != "#todo" {
+			t.Errorf("expected only #todo, got %v", m.filtered)
+		}
+	})
+
+	t.Run("down-arrow moves focus to the list when a tag is visible", func(t *testing.T) {
+		m := initialTagsModel(tags, noopSaveDescription)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = result.(tagsModel)
+		if m.focus != tagsFocusList {
+			t.Errorf("expected focus to move to list, got %v", m.focus)
+		}
+		if m.cursor != 0 {
+			t.Errorf("expected cursor to reset to 0, got %d", m.cursor)
+		}
+	})
+
+	t.Run("down-arrow does not move focus when no tags are visible", func(t *testing.T) {
+		m := initialTagsModel(tags, noopSaveDescription)
+		m = typeString(m, "zzz")
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = result.(tagsModel)
+		if m.focus != tagsFocusInput {
+			t.Errorf("expected focus to remain on input, got %v", m.focus)
+		}
+	})
+
+	t.Run("q is typed into the input, not treated as quit", func(t *testing.T) {
+		m := initialTagsModel(tags, noopSaveDescription)
+		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+		if isQuit(cmd) {
+			t.Error("expected q to be forwarded to the filter input, not quit")
+		}
+		if result.(tagsModel).filterInput.Value() != "q" {
+			t.Errorf("expected q typed into filter input, got %q", result.(tagsModel).filterInput.Value())
+		}
+	})
+
+	t.Run("esc quits", func(t *testing.T) {
+		m := initialTagsModel(tags, noopSaveDescription)
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		if cmd == nil {
+			t.Error("expected quit cmd from esc")
+		}
+	})
+
+	t.Run("ctrl+c quits", func(t *testing.T) {
+		m := initialTagsModel(tags, noopSaveDescription)
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		if cmd == nil {
+			t.Error("expected quit cmd from ctrl+c")
+		}
+	})
+}
+
+// focusList moves focus from the filter input to the tag list via down-arrow.
+func focusList(m tagsModel) tagsModel {
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	return result.(tagsModel)
 }
 
 func TestTagsModelListNavigation(t *testing.T) {
 	tags := []store.Tag{{Name: "#auth"}, {Name: "#bug"}, {Name: "#todo"}}
 
-	t.Run("down moves cursor forward", func(t *testing.T) {
-		m := initialTagsModel(tags, noopSaveDescription)
+	t.Run("down moves cursor forward once list is focused", func(t *testing.T) {
+		m := focusList(initialTagsModel(tags, noopSaveDescription))
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		if result.(tagsModel).cursor != 1 {
 			t.Errorf("expected cursor at 1, got %d", result.(tagsModel).cursor)
@@ -54,7 +185,7 @@ func TestTagsModelListNavigation(t *testing.T) {
 	})
 
 	t.Run("down does not go past end of list", func(t *testing.T) {
-		m := initialTagsModel(tags, noopSaveDescription)
+		m := focusList(initialTagsModel(tags, noopSaveDescription))
 		for i := 0; i < 5; i++ {
 			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 			m = result.(tagsModel)
@@ -64,21 +195,29 @@ func TestTagsModelListNavigation(t *testing.T) {
 		}
 	})
 
-	t.Run("up does not go before start of list", func(t *testing.T) {
-		m := initialTagsModel(tags, noopSaveDescription)
+	t.Run("up on first row moves focus back to filter input", func(t *testing.T) {
+		m := focusList(initialTagsModel(tags, noopSaveDescription))
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
-		if result.(tagsModel).cursor != 0 {
-			t.Errorf("expected cursor to stay at 0, got %d", result.(tagsModel).cursor)
+		updated := result.(tagsModel)
+		if updated.focus != tagsFocusInput {
+			t.Errorf("expected focus back on input, got %v", updated.focus)
+		}
+		if !updated.filterInput.Focused() {
+			t.Error("expected filter input to be re-focused")
 		}
 	})
 
-	t.Run("up moves cursor back", func(t *testing.T) {
-		m := initialTagsModel(tags, noopSaveDescription)
+	t.Run("up moves cursor back when not on first row", func(t *testing.T) {
+		m := focusList(initialTagsModel(tags, noopSaveDescription))
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		m2 := result.(tagsModel)
 		result2, _ := m2.Update(tea.KeyMsg{Type: tea.KeyUp})
-		if result2.(tagsModel).cursor != 0 {
-			t.Errorf("expected cursor back at 0, got %d", result2.(tagsModel).cursor)
+		updated := result2.(tagsModel)
+		if updated.cursor != 0 {
+			t.Errorf("expected cursor back at 0, got %d", updated.cursor)
+		}
+		if updated.focus != tagsFocusList {
+			t.Errorf("expected focus to remain on list, got %v", updated.focus)
 		}
 	})
 }
@@ -106,6 +245,7 @@ func TestTagsModelListView_ScrollsToKeepCursorVisible(t *testing.T) {
 	m := initialTagsModel(manyTags(30), noopSaveDescription)
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 	m = result.(tagsModel)
+	m = focusList(m)
 
 	t.Run("short terminal does not render every tag", func(t *testing.T) {
 		view := m.View()
@@ -134,7 +274,7 @@ func TestTagsModelQuitFromList(t *testing.T) {
 	tags := []store.Tag{{Name: "#auth"}}
 
 	t.Run("ctrl+c quits", func(t *testing.T) {
-		m := initialTagsModel(tags, noopSaveDescription)
+		m := focusList(initialTagsModel(tags, noopSaveDescription))
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 		if cmd == nil {
 			t.Error("expected quit cmd from ctrl+c")
@@ -142,7 +282,7 @@ func TestTagsModelQuitFromList(t *testing.T) {
 	})
 
 	t.Run("esc quits", func(t *testing.T) {
-		m := initialTagsModel(tags, noopSaveDescription)
+		m := focusList(initialTagsModel(tags, noopSaveDescription))
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		if cmd == nil {
 			t.Error("expected quit cmd from esc")
@@ -150,7 +290,7 @@ func TestTagsModelQuitFromList(t *testing.T) {
 	})
 
 	t.Run("q quits", func(t *testing.T) {
-		m := initialTagsModel(tags, noopSaveDescription)
+		m := focusList(initialTagsModel(tags, noopSaveDescription))
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 		if cmd == nil {
 			t.Error("expected quit cmd from q")
@@ -163,7 +303,7 @@ func TestTagsModelEnterOpensEntity(t *testing.T) {
 		{Name: "#auth", Description: "auth stuff", NoteCount: 2},
 		{Name: "#todo", NoteCount: 1},
 	}
-	m := initialTagsModel(tags, noopSaveDescription)
+	m := focusList(initialTagsModel(tags, noopSaveDescription))
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m2 := result.(tagsModel)
@@ -182,7 +322,7 @@ func TestTagsModelEnterOpensEntity(t *testing.T) {
 }
 
 func tagsModelInEntity(tags []store.Tag, saveFn func(string, string) error) tagsModel {
-	m := initialTagsModel(tags, saveFn)
+	m := focusList(initialTagsModel(tags, saveFn))
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	return result.(tagsModel)
 }
@@ -226,10 +366,7 @@ func TestTagsModelEntityPhase(t *testing.T) {
 			return nil
 		}
 		m := tagsModelInEntity(tags, saveFn)
-		for _, ch := range " updated" {
-			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
-			m = result.(tagsModel)
-		}
+		m = typeString(m, " updated")
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 		updated := result.(tagsModel)
 
@@ -244,6 +381,9 @@ func TestTagsModelEntityPhase(t *testing.T) {
 		}
 		if updated.tags[0].Description != "existing updated" {
 			t.Errorf("expected local tag description updated, got %q", updated.tags[0].Description)
+		}
+		if updated.filtered[0].Description != "existing updated" {
+			t.Errorf("expected filtered tag description updated, got %q", updated.filtered[0].Description)
 		}
 	})
 
@@ -293,6 +433,22 @@ func TestTagsModelView(t *testing.T) {
 		}
 		if !strings.Contains(view, "2") || !strings.Contains(view, "1") {
 			t.Errorf("expected view to contain note counts, got: %s", view)
+		}
+	})
+
+	t.Run("list view shows the filter placeholder", func(t *testing.T) {
+		m := initialTagsModel(tags, noopSaveDescription)
+		view := m.View()
+		if !strings.Contains(view, "type to filter tags...") {
+			t.Errorf("expected view to contain filter placeholder, got: %s", view)
+		}
+	})
+
+	t.Run("list view shows empty-list text when filter matches nothing", func(t *testing.T) {
+		m := typeString(initialTagsModel(tags, noopSaveDescription), "zzz")
+		view := m.View()
+		if !strings.Contains(view, "no matching tags") {
+			t.Errorf("expected view to contain empty-list text, got: %s", view)
 		}
 	})
 
@@ -362,13 +518,8 @@ func TestRunTags(t *testing.T) {
 		}
 		db.Close()
 
-		m := initialTagsModel(tags, func(name, desc string) error { return nil })
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		entity := result.(tagsModel)
-		for _, ch := range "my notes" {
-			r, _ := entity.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
-			entity = r.(tagsModel)
-		}
+		entity := tagsModelInEntity(tags, func(name, desc string) error { return nil })
+		entity = typeString(entity, "my notes")
 		final, _ := entity.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 
 		if err := runTags(fixedTagsProg(final.(tagsModel))); err != nil {
