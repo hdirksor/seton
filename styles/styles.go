@@ -43,12 +43,10 @@ const (
 	red         = lipgloss.ANSIColor(1)
 	green       = lipgloss.ANSIColor(2)
 	yellow      = lipgloss.ANSIColor(3)
-	blue        = lipgloss.ANSIColor(4)
 	magenta     = lipgloss.ANSIColor(5)
 	cyan        = lipgloss.ANSIColor(6)
 	white       = lipgloss.ANSIColor(7)
 	brightBlack = lipgloss.ANSIColor(8)
-	brightWhite = lipgloss.ANSIColor(15)
 )
 
 func (DefaultTheme) Banner() string {
@@ -85,7 +83,7 @@ func (DefaultTheme) Selected() lipgloss.Style {
 }
 
 func (DefaultTheme) FocusedRow() lipgloss.Style {
-	return lipgloss.NewStyle().Background(blue).Foreground(brightWhite).Bold(true)
+	return lipgloss.NewStyle().Reverse(true).Bold(true)
 }
 
 func (DefaultTheme) Card() lipgloss.Style {
